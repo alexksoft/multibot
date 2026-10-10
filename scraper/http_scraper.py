@@ -136,7 +136,7 @@ class EpicentrAdapter:
             rows = self._parse_html(html, category, url, today)
 
         logger.info(f"[epicentr] {category}: {len(rows)} items from {url}")
-        return rows[:20]  # limit per category
+        return rows  # no artificial limit
 
     def _parse_html(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
         """Fallback HTML parser for product names and prices."""
