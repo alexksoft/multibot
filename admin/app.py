@@ -23,7 +23,8 @@ from src.multibot.config.sections import BotConfig
 from src.multibot.config.settings import settings
 
 BOTS_DIR = Path(settings.bots_dir)
-SCRAPER_CONFIG = Path("scraper/config.yaml")
+# Absolute path — never depends on working directory
+SCRAPER_CONFIG = Path(__file__).parent.parent / "scraper" / "config.yaml"
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["enumerate"] = enumerate
 

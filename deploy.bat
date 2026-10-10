@@ -16,7 +16,11 @@ echo [1/3] Copying files...
 %SCP% src         %REMOTE%/
 %SCP% bots        %REMOTE%/
 %SCP% admin       %REMOTE%/
-%SCP% scraper     %REMOTE%/
+%SCP% scraper\base.py          %SERVER%:/home/opc/marketing_multibot_telegram/scraper/base.py
+%SCP% scraper\http_scraper.py  %SERVER%:/home/opc/marketing_multibot_telegram/scraper/http_scraper.py
+%SCP% scraper\__init__.py      %SERVER%:/home/opc/marketing_multibot_telegram/scraper/__init__.py
+%SCP% scraper\__main__.py      %SERVER%:/home/opc/marketing_multibot_telegram/scraper/__main__.py
+%SCP% scraper\adapters         %SERVER%:/home/opc/marketing_multibot_telegram/scraper/
 %SCP% tests       %REMOTE%/
 %SCP% main.py     %SERVER%:/home/opc/marketing_multibot_telegram/main.py
 %SCP% requirements.txt %SERVER%:/home/opc/marketing_multibot_telegram/requirements.txt
