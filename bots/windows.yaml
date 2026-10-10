@@ -56,7 +56,6 @@ conversation_flows:
         - id: measure_cl
           kind: capability
           capability: checklist
-          params: { template: window_measure }
           next: make_request
         - id: make_request
           kind: capability
@@ -86,12 +85,8 @@ knowledge:
     cache_ttl_seconds: 300
   calculation_rules:
     - { id: area, label: "Площа вікна", expression: "(size_width / 100) * (size_height / 100)", unit: "м²", round_to: 2 }
-  # norms — коефіцієнти витрат для calculation_rules (цьому боту не потрібні):
-  # norms: { coef_name: 1.0 }
-  # catalog — локальний резерв, якщо Google Sheets недоступний:
-  # catalog:
-  #   - { category: "Вікно", item: "140x120 двокамерне біле", price: 5200, unit: "грн",
-  #       source_name: "ВікноМаркет", source_url: "https://...", collected_at: "2026-10", active: true }
+  norms: {}
+  work_rules: {}
   faq:
     - question: "Який склопакет кращий для сонячної сторони?"
       answer: "Для сонячної сторони варто розглянути енергозберігаючий склопакет із захистом від перегріву."
@@ -104,39 +99,24 @@ knowledge:
 ai_policy:
   version: 1
   enabled: true
-  model: claude-opus-4.7
-  max_tokens: 700
+  model: claude-sonnet-4-5
+  max_tokens: 400
   clarify_when_unsure: true
   allowed_tools: ["calculate_materials", "search_products", "compare_options"]
   forbidden_advice: []
   system_prompt: |
-    Ти — безкоштовний AI-помічник для вибору вікон і дверей. Ти НЕ представляєш
-    конкретну компанію. Пояснюй різницю між комплектаціями, допомагай підібрати
-    варіант під потреби й підготувати заявку для продавця. Площу бери з
-    calculate_materials, а ціни — ЛИШЕ з матриці (search_products) і ЗАВЖДИ з назвою
-    магазину-джерела. Остаточну ціну визначає продавець після замору — не вигадуй сум.
+    Ти — безкоштовний AI-помічник для вибору вікон і дверей. Ти НЕ представляєш конкретну компанію.
+    ВАЖЛИВО: якщо користувач хоче підібрати вікно або дізнатися ціни — НЕ питай деталі сам.
+    Запропонуй скористатися пунктом меню "Підібрати та підготувати заявку" — там бот проведе крок за кроком.
+    На загальні запитання про вікна — відповідай коротко і по суті.
+    Остаточну ціну визначає продавець після заміру — не вигадуй сум.
 
 # 6. Integrations
 integrations:
   version: 1
   deliver_to_user: true
-  # Збираємо лише дані, потрібні для роботи бота (data minimization).
-  # Персональні контакти не запитуємо. Додати поле за потреби (шаблон):
-  # request_form:
-  #   - { id: name, label: "Ваше ім'я (необов'язково)", type: text, required: false }
   request_form: []
   sinks:
     - type: telegram_manager
       enabled: false
       config: { chat_id_env: WINDOWS_MANAGER_CHAT_ID }
-
-# 7. Booking — демо-запис (ВИМКНЕНО для цього бота; шаблон).
-# Фіча спільна; щоб увімкнути демо-запис на замір — розкоментуй і постав enabled: true.
-# booking:
-#   version: 1
-#   enabled: true
-#   provider_term: "замірник"
-#   service_term: "послуга"
-#   demo_masters: 5
-#   contacts_text: "Демонстраційна компанія. Реальний запис — після інтеграції з конкретним продавцем."
-#   intro: "Можу показати, як працює онлайн-запис на замір вікон."
