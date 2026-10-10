@@ -4,7 +4,7 @@
 
 bots:
   building_assistant:
-    worksheet: "Матеріали"
+    worksheet: "building_assistant_prices"
     sources:
       - name: "Епіцентр"
         base_url: "https://epicentrk.ua"
@@ -25,17 +25,17 @@ bots:
             url: "https://epicentrk.ua/ua/shop/zatirka-dlya-shvov/"
 
   beauty_assistant:
-    worksheet: "Послуги"
+    worksheet: "beauty_assistant_prices"
     sources: []
 
   furniture_assistant:
-    worksheet: "Матеріали"
+    worksheet: "furniture_assistant_prices"
     sources: []
 
   auto_service_assistant:
-    worksheet: "Роботи"
+    worksheet: "auto_service_assistant_prices"
     sources: []
 
   windows_assistant:
-    worksheet: "Вікна"
+    worksheet: "windows_assistant_prices"
     sources: []

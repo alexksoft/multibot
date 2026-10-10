@@ -266,7 +266,7 @@ async def run_scraper(
     scraper_cfg = _load_scraper_config()
     bot_cfg = scraper_cfg.get("bots", {}).get(bot_name, {})
     sources = bot_cfg.get("sources", [])
-    worksheet = bot_cfg.get("worksheet", "Матеріали")
+    worksheet = f"{bot_name}_prices"  # always bot_name_prices
 
     configs = load_configs(settings.bots_dir)
     cfg = next((c for c in configs if c.name == bot_name), None)

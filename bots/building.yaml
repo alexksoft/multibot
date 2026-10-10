@@ -87,7 +87,7 @@ knowledge:
   sheets:
     enabled: true
     sheet_id_env: BUILDING_SHEET_ID
-    worksheet: "Матеріали"
+    worksheet: "building_assistant_prices"
     cache_ttl_seconds: 300
   calculation_rules:
     - { id: wall_area,    label: "Площа стін",      expression: "(room_width + room_length) * 2 * height", unit: "м²", round_to: 1 }
