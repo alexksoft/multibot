@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Боти — Multibot Admin{% endblock %}
+{% block content %}
+<h2>🤖 Practical AI Assistants — Боти</h2>
+{% for bot in bots %}
+<div class="card">
+  <strong><a href="/bot/{{ bot.name }}">{{ bot.name }}</a></strong>
+  &nbsp;
+  <span class="badge {% if bot.has_token %}badge-ok{% else %}badge-off{% endif %}">
+    токен: {% if bot.has_token %}✓{% else %}не задано{% endif %}
+  </span>
+  <span class="badge {% if bot.sheets_enabled %}badge-ok{% else %}badge-warn{% endif %}">
+    sheets: {% if bot.sheets_enabled %}увімкнено{% else %}вимкнено{% endif %}
+  </span>
+  {% if bot.booking_enabled %}<span class="badge badge-ok">booking ✓</span>{% endif %}
+  <p>{{ bot.role }} · {{ bot.industry }} · {{ bot.language }}</p>
+  <p>Flows: {{ bot.flows | join(", ") }}</p>
+  <p>Capabilities: {{ bot.capabilities | join(", ") }}</p>
+</div>
+{% else %}
+<p>Конфігурацій не знайдено в <code>bots/</code>.</p>
+{% endfor %}
+{% endblock %}

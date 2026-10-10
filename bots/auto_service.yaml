@@ -1,0 +1,134 @@
+# Practical AI Assistants — Auto Service Assistant (пріоритет №3).
+name: auto_service_assistant
+token_env: AUTO_BOT_TOKEN
+
+# 1. Assistant Profile
+assistant_profile:
+  version: 1
+  series_name: "Practical AI Assistants"
+  assistant_role: "AI-помічник для підготовки до візиту на СТО"
+  industry: "обслуговування авто"
+  target_user: "автовласники"
+  language: uk
+  tone: friendly
+  disclaimer: "Безкоштовний демонстраційний AI-асистент. Не представляє конкретне СТО і не ставить діагноз."
+  developer_note: "Потрібен подібний асистент для бізнесу? Це демонстрація можливостей розробки чат-ботів."
+
+# 2. Conversation Flows
+conversation_flows:
+  version: 1
+  menu_title: "Чим допомогти?"
+  cancel_commands: ["/cancel", "скасувати"]
+  flows:
+    - id: prepare_visit
+      title: "Підготуватися до СТО"
+      start: ask_car
+      steps:
+        - id: ask_car
+          kind: question
+          text: "Марка, модель і рік авто (напр. BMW X5 2015)?"
+          question_type: text
+          save_as: car
+          next: ask_symptom
+        - id: ask_symptom
+          kind: question
+          text: "Опишіть симптом (напр. 'загорівся Check Engine', 'стук спереду')."
+          question_type: text
+          save_as: symptom
+          next: gen_questions
+        - id: gen_questions
+          kind: capability
+          capability: questions_for_pro
+          next: pre_checklist
+        - id: pre_checklist
+          kind: capability
+          capability: checklist
+          params: { template: sto_visit }
+          next: make_desc
+        - id: make_desc
+          kind: capability
+          capability: prepare_request
+          next: done
+        - id: done
+          kind: message
+          text: "Готовий опис проблеми й перелік запитань — покажіть їх механіку на СТО."
+    - id: questions_only
+      title: "Питання до механіка"
+      start: q
+      steps:
+        - id: q
+          kind: capability
+          capability: questions_for_pro
+
+# 3. Capabilities
+capabilities:
+  version: 1
+  enabled:
+    - name: questions_for_pro
+    - name: checklist
+    - name: prepare_request
+
+# 4. Knowledge & Data
+knowledge:
+  version: 1
+  # Цей бот кваліфікує звернення без матриці цін. Щоб увімкнути орієнтовні ціни
+  # робіт/запчастин з Google Sheets, розкоментуй блок sheets і додай AUTO_SHEET_ID у .env:
+  # sheets:
+  #   enabled: true
+  #   sheet_id_env: AUTO_SHEET_ID
+  #   worksheet: "Роботи"
+  #   cache_ttl_seconds: 300
+  # calculation_rules: []       # цьому боту розрахунки не потрібні
+  # norms: {}
+  # catalog:                    # локальний резерв, якщо Sheets недоступний
+  #   - { category: "Робота", item: "Діагностика", price: 0, unit: "грн",
+  #       source_name: "...", source_url: "https://...", collected_at: "2026-10", active: true }
+  faq:
+    - question: "Що означає Check Engine?"
+      answer: "Це індикатор несправності. Причин багато — потрібна комп'ютерна діагностика на СТО."
+      keywords: ["check engine", "чек", "лампочка"]
+    - question: "Як підготуватися до візиту на СТО?"
+      answer: "Опишіть симптоми, коли й як проявляються, останні роботи та пробіг."
+      keywords: ["підготуватися", "сто", "візит"]
+
+# 5. AI Policy
+ai_policy:
+  version: 1
+  enabled: true
+  model: claude-opus-4.7
+  max_tokens: 600
+  clarify_when_unsure: true
+  allowed_tools: ["questions_for_pro", "checklist"]
+  forbidden_advice:
+    - "точний технічний діагноз без огляду авто"
+  system_prompt: |
+    Ти — безкоштовний AI-помічник для підготовки до візиту на СТО. Ти НЕ представляєш
+    конкретне СТО і НЕ ставиш точний діагноз. Твоя задача — допомогти чітко описати
+    проблему, скласти перелік запитань до механіка й чекліст перед візитом. Якщо
+    користувач просить діагноз — поясни, що це визначить майстер після огляду, і
+    запропонуй підготувати запитання. Будь ввічливим і конкретним.
+
+# 6. Integrations
+integrations:
+  version: 1
+  deliver_to_user: true
+  # Збираємо лише дані, потрібні для роботи бота (data minimization).
+  # Персональні контакти не запитуємо. Додати поле за потреби (шаблон):
+  # request_form:
+  #   - { id: name, label: "Ваше ім'я (необов'язково)", type: text, required: false }
+  request_form: []
+  sinks:
+    - type: telegram_manager
+      enabled: false
+      config: { chat_id_env: AUTO_MANAGER_CHAT_ID }
+
+# 7. Booking — демо-запис (ВИМКНЕНО для цього бота; шаблон).
+# Фіча спільна; щоб увімкнути демо-запис на СТО — розкоментуй і постав enabled: true.
+# booking:
+#   version: 1
+#   enabled: true
+#   provider_term: "майстер"
+#   service_term: "робота"
+#   demo_masters: 5
+#   contacts_text: "Демонстраційне СТО. Реальний запис — після інтеграції з конкретним сервісом."
+#   intro: "Можу показати, як працює онлайн-запис на сервіс."

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.name }} — Multibot Admin{% endblock %}
+{% block content %}
+<h2>🤖 {{ cfg.name }}</h2>
+<div class="card">
+  <h3>1. Assistant Profile</h3>
+  <p><b>Роль:</b> {{ cfg.assistant_profile.assistant_role }}</p>
+  <p><b>Галузь:</b> {{ cfg.assistant_profile.industry }}</p>
+  <p><b>Мова:</b> {{ cfg.assistant_profile.language }} · <b>Тон:</b> {{ cfg.assistant_profile.tone }}</p>
+  <p><b>Disclaimer:</b> {{ cfg.assistant_profile.disclaimer }}</p>
+</div>
+<div class="card">
+  <h3>2. Conversation Flows</h3>
+  {% for flow in cfg.conversation_flows.flows %}
+  <p><b>{{ flow.id }}</b>: {{ flow.title }} ({{ flow.steps | length }} кроків)</p>
+  {% endfor %}
+</div>
+<div class="card">
+  <h3>3. Capabilities</h3>
+  <p>{{ cfg.capabilities.enabled | map(attribute='name') | join(', ') or 'немає' }}</p>
+</div>
+<div class="card">
+  <h3>4. Knowledge & Data</h3>
+  <p>Sheets: {% if cfg.knowledge.sheets.enabled %}✓ {{ cfg.knowledge.sheets.sheet_id_env }}{% else %}вимкнено{% endif %}</p>
+  <p>FAQ: {{ cfg.knowledge.faq | length }} записів</p>
+  <p>Правила розрахунку: {{ cfg.knowledge.calculation_rules | length }}</p>
+</div>
+<div class="card">
+  <h3>5. AI Policy</h3>
+  <p>Модель: {{ cfg.ai_policy.model or 'claude-opus-4.7' }}</p>
+  <p>Allowed tools: {{ cfg.ai_policy.allowed_tools | join(', ') or 'немає' }}</p>
+</div>
+<div class="card">
+  <h3>6. Integrations</h3>
+  <p>Deliver to user: {{ cfg.integrations.deliver_to_user }}</p>
+  {% for sink in cfg.integrations.sinks %}
+  <p>Sink: {{ sink.type }} — {% if sink.enabled %}увімкнено{% else %}вимкнено{% endif %}</p>
+  {% endfor %}
+</div>
+{% if cfg.booking.enabled %}
+<div class="card">
+  <h3>7. Booking (увімкнено)</h3>
+  <p>{{ cfg.booking.provider_term }} / {{ cfg.booking.service_term }} · {{ cfg.booking.demo_masters }} демо-майстрів</p>
+</div>
+{% endif %}
+<p><a href="/">← Назад</a></p>
+{% endblock %}

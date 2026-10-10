@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Новий бот — Multibot Admin{% endblock %}
+{% block content %}
+<h2>➕ Створити нового бота</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if instruction %}
+<div class="card" style="background:#d4edda">
+  <h3>✅ Готово! Інструкція:</h3>
+  <pre>{{ instruction }}</pre>
+  <h4>Згенерований YAML:</h4>
+  <pre>{{ yaml_result }}</pre>
+</div>
+{% else %}
+<form method="post" action="/new">
+  <label>Ніша / роль асистента
+    <input name="niche" required placeholder="напр. Ветеринарний помічник">
+  </label>
+  <label>Тип користувача
+    <input name="target_user" required placeholder="напр. власники домашніх тварин">
+  </label>
+  <label>Мова
+    <select name="language">
+      <option value="uk">Українська</option>
+      <option value="en">English</option>
+      <option value="ru">Русский</option>
+    </select>
+  </label>
+  <label>Тон
+    <select name="tone">
+      <option value="friendly">Дружній</option>
+      <option value="professional">Професійний</option>
+      <option value="casual">Неформальний</option>
+    </select>
+  </label>
+  <label>Потрібна матриця цін (Google Sheets)?
+    <select name="needs_sheets">
+      <option value="no">Ні</option>
+      <option value="yes">Так</option>
+    </select>
+  </label>
+  <input type="submit" value="Згенерувати через AI">
+</form>
+{% endif %}
+{% endblock %}

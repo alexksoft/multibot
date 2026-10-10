@@ -1,0 +1,134 @@
+# Practical AI Assistants — Beauty Service Assistant (пріоритет №5).
+name: beauty_assistant
+token_env: BEAUTY_BOT_TOKEN
+
+# 1. Assistant Profile
+assistant_profile:
+  version: 1
+  series_name: "Practical AI Assistants"
+  assistant_role: "AI-помічник для вибору салонної послуги"
+  industry: "б'юті-послуги"
+  target_user: "хто вибирає салонну послугу"
+  language: uk
+  tone: friendly
+  disclaimer: "Безкоштовний демонстраційний AI-асистент. Не представляє конкретний салон. Фактичні ціни й час з'являться після інтеграції з реальними салонами."
+  developer_note: "Потрібен подібний асистент для бізнесу? Це демонстрація можливостей розробки чат-ботів."
+
+# 2. Conversation Flows
+conversation_flows:
+  version: 1
+  menu_title: "Чим допомогти?"
+  cancel_commands: ["/cancel", "скасувати"]
+  flows:
+    - id: choose
+      title: "Підібрати послугу"
+      start: show_services
+      steps:
+        - id: show_services
+          kind: capability
+          capability: search_products     # перелік послуг і орієнтовних цін із матриці
+          next: ask_goal
+        - id: ask_goal
+          kind: question
+          text: "Що хочете змінити або отримати? Опишіть побажання."
+          question_type: text
+          save_as: goal
+          next: gen_questions
+        - id: gen_questions
+          kind: capability
+          capability: questions_for_pro
+          next: make_request
+        - id: make_request
+          kind: capability
+          capability: prepare_request
+          next: done
+        - id: done
+          kind: message
+          text: "Готовий запит і питання до майстра — надішліть їх будь-якому обраному салону."
+    - id: explain
+      title: "Пояснити різницю процедур"
+      start: ex
+      steps:
+        - id: ex
+          kind: message
+          text: "Напишіть, які процедури порівняти — поясню різницю простими словами."
+
+# 3. Capabilities
+capabilities:
+  version: 1
+  enabled:
+    - name: search_products
+    - name: compare_options
+    - name: questions_for_pro
+    - name: prepare_request
+
+# 4. Knowledge & Data
+knowledge:
+  version: 1
+  # Матриця послуг і орієнтовних ринкових цін (наповнює скрейпер). Ціна — з джерелом.
+  sheets:
+    enabled: true
+    sheet_id_env: BEAUTY_SHEET_ID
+    worksheet: "Послуги"
+    cache_ttl_seconds: 300
+  # calculation_rules — цьому боту розрахунки не потрібні (шаблон):
+  # calculation_rules:
+  #   - { id: id, label: "...", expression: "...", unit: "...", round_to: 0 }
+  # norms: { coef_name: 1.0 }
+  # catalog — локальний резерв, якщо Google Sheets недоступний:
+  # catalog:
+  #   - { category: "Стрижка", item: "Жіноча", price: 450, unit: "грн",
+  #       source_name: "example-salon.ua", source_url: "https://...", collected_at: "2026-10", active: true }
+  faq:
+    - question: "Чим ламінування відрізняється від ботоксу для волосся?"
+      answer: "Це різні процедури догляду: одна більше про гладкість і блиск, інша — про відновлення. Остаточну рекомендацію дає майстер."
+      keywords: ["ламінування", "ботокс", "різниця"]
+    - question: "Як підготуватися до візиту?"
+      answer: "Сформулюйте бажаний результат і покажіть приклади — так майстру простіше підібрати процедуру."
+      keywords: ["підготуватися", "візит", "майстер"]
+
+# 5. AI Policy
+ai_policy:
+  version: 1
+  enabled: true
+  model: claude-opus-4.7
+  max_tokens: 600
+  clarify_when_unsure: true
+  allowed_tools: ["search_products", "compare_options", "questions_for_pro"]
+  forbidden_advice:
+    - "медичні діагнози та призначення"
+  system_prompt: |
+    Ти — безкоштовний AI-помічник для вибору салонної послуги. Ти НЕ представляєш
+    конкретний салон. Пояснюй різницю між процедурами простими словами, допомагай
+    підібрати послугу під побажання й підготувати запит і питання до майстра.
+    Орієнтовні ціни бери ЛИШЕ з матриці (search_products) і ЗАВЖДИ називай із
+    джерелом (сайт/салон) і приміткою «орієнтовно за ринком». Не вигадуй цін, не
+    обіцяй конкретний вільний час. НЕ надавай медичних консультацій — остаточні
+    рекомендації дає спеціаліст.
+
+# 6. Integrations
+integrations:
+  version: 1
+  deliver_to_user: true
+  # Збираємо лише дані, потрібні для роботи бота (data minimization).
+  # Персональні контакти не запитуємо. Додати поле за потреби (шаблон):
+  # request_form:
+  #   - { id: name, label: "Ваше ім'я (необов'язково)", type: text, required: false }
+  request_form: []
+  sinks:
+    - type: telegram_manager
+      enabled: false
+      config: { chat_id_env: BEAUTY_MANAGER_CHAT_ID }
+
+# 7. Booking — демо-запис на послугу (УВІМКНЕНО для beauty).
+# Усі майстри/послуги/розклад — вигадані (demo), щоб користувач міг спробувати запис.
+# Персональні дані (ім'я + телефон) запитуються ЛИШЕ на кроці самого запису.
+# CRM-керування — у наявній admin-панелі (розділ /crm). Нагадування за 2 год — поки відкладено.
+booking:
+  version: 1
+  enabled: true
+  provider_term: "майстер"
+  service_term: "послуга"
+  demo_masters: 5
+  contacts_text: "Це демонстраційний салон. Контакти та реальний запис з'являться після інтеграції з конкретним салоном."
+  intro: "Можу показати, як працює онлайн-запис: оберіть послугу, майстра, дату й вільний час."

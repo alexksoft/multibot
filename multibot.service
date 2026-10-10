@@ -1,0 +1,17 @@
+[Unit]
+Description=Practical AI Assistants — Telegram Multibot
+After=network.target
+
+[Service]
+User=opc
+WorkingDirectory=/home/opc/marketing_multibot_telegram
+Environment="PYTHONPATH=/home/opc/marketing_multibot_telegram/.venv/lib/python3.9/site-packages"
+EnvironmentFile=/etc/multibot.env
+ExecStart=/usr/bin/python3 main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
