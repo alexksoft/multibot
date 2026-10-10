@@ -85,19 +85,14 @@ capabilities:
 # 4. Knowledge & Data
 knowledge:
   version: 1
-  # Цей бот — конфігуратор без матриці цін. Щоб увімкнути ціни з Google Sheets,
-  # розкоментуй блок sheets і додай FURNITURE_SHEET_ID у .env:
-  # sheets:
-  #   enabled: true
-  #   sheet_id_env: FURNITURE_SHEET_ID
-  #   worksheet: "Матеріали"
-  #   cache_ttl_seconds: 300
-  # calculation_rules:          # декларативні правила розрахунку (за потреби)
-  #   - { id: area, label: "...", expression: "...", unit: "...", round_to: 1 }
-  # norms: { coef_name: 1.0 }   # коефіцієнти для calculation_rules
-  # catalog:                    # локальний резерв, якщо Sheets недоступний
-  #   - { category: "...", item: "...", price: 0, unit: "грн",
-  #       source_name: "...", source_url: "https://...", collected_at: "2026-10", active: true }
+  sheets:
+    enabled: true
+    sheet_id_env: FURNITURE_SHEET_ID
+    worksheet: "furniture_assistant_prices"
+    cache_ttl_seconds: 300
+  calculation_rules: []
+  norms: {}
+  work_rules: {}
   faq:
     - question: "Скільки виготовляється кухня?"
       answer: "Зазвичай від 3 до 5 тижнів після затвердження проєкту (орієнтовно за ринком)."

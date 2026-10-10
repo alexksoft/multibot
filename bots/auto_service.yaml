@@ -71,18 +71,14 @@ capabilities:
 # 4. Knowledge & Data
 knowledge:
   version: 1
-  # Цей бот кваліфікує звернення без матриці цін. Щоб увімкнути орієнтовні ціни
-  # робіт/запчастин з Google Sheets, розкоментуй блок sheets і додай AUTO_SHEET_ID у .env:
-  # sheets:
-  #   enabled: true
-  #   sheet_id_env: AUTO_SHEET_ID
-  #   worksheet: "Роботи"
-  #   cache_ttl_seconds: 300
-  # calculation_rules: []       # цьому боту розрахунки не потрібні
-  # norms: {}
-  # catalog:                    # локальний резерв, якщо Sheets недоступний
-  #   - { category: "Робота", item: "Діагностика", price: 0, unit: "грн",
-  #       source_name: "...", source_url: "https://...", collected_at: "2026-10", active: true }
+  sheets:
+    enabled: true
+    sheet_id_env: AUTO_SHEET_ID
+    worksheet: "auto_service_assistant_prices"
+    cache_ttl_seconds: 300
+  calculation_rules: []
+  norms: {}
+  work_rules: {}
   faq:
     - question: "Що означає Check Engine?"
       answer: "Це індикатор несправності. Причин багато — потрібна комп'ютерна діагностика на СТО."

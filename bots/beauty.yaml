@@ -69,7 +69,7 @@ knowledge:
   sheets:
     enabled: true
     sheet_id_env: BEAUTY_SHEET_ID
-    worksheet: "Послуги"
+    worksheet: "beauty_assistant_prices"
     cache_ttl_seconds: 300
   # calculation_rules — цьому боту розрахунки не потрібні (шаблон):
   # calculation_rules:

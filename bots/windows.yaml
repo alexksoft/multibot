@@ -81,7 +81,7 @@ knowledge:
   sheets:
     enabled: true
     sheet_id_env: WINDOWS_SHEET_ID
-    worksheet: "Вікна"
+    worksheet: "windows_assistant_prices"
     cache_ttl_seconds: 300
   calculation_rules:
     - { id: area, label: "Площа вікна", expression: "(size_width / 100) * (size_height / 100)", unit: "м²", round_to: 2 }
