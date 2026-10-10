@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import date
 from urllib.robotparser import RobotFileParser
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode, urlunparse, parse_qs, urljoin
 
 import httpx
 
@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 USER_AGENT = "PracticalAIAssistantsBot/1.0 (educational demo scraper)"
 CRAWL_DELAY = 2.0
 TIMEOUT = 15.0
+MAX_PAGES = 5  # max pages to paginate per category
 
 
 def check_robots(base_url: str, path: str) -> bool:
-    """Return True if crawling is allowed by robots.txt."""
     try:
         rp = RobotFileParser()
         rp.set_url(f"{base_url}/robots.txt")
@@ -37,7 +37,6 @@ def check_robots(base_url: str, path: str) -> bool:
 
 
 async def check_robots_async(url: str) -> dict:
-    """Check robots.txt for a URL. Returns dict with allowed, delay, details."""
     parsed = urlparse(url)
     base = f"{parsed.scheme}://{parsed.netloc}"
     try:
@@ -63,53 +62,83 @@ async def check_robots_async(url: str) -> dict:
     }
 
 
+def _page_url(url: str, page: int) -> str:
+    """Append ?page=N to a URL."""
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    qs["page"] = [str(page)]
+    new_query = "&".join(f"{k}={v[0]}" for k, v in qs.items())
+    return urlunparse(parsed._replace(query=new_query))
+
+
 class GenericAIAdapter:
     """
     Universal adapter: fetches any category page and uses AI to extract
-    product names and prices. Works for any site without site-specific code.
+    product names and prices. Supports pagination for JSON-LD sites.
     """
 
     def __init__(self, source_name: str, base_url: str,
                  kiro_url: str = "", kiro_key: str = ""):
         self.name = source_name
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
         self._kiro_url = kiro_url
         self._kiro_key = kiro_key
 
     async def fetch(self, category: str, url: str) -> list[ScrapedRow]:
         today = date.today().strftime("%Y-%m")
+        all_rows: list[ScrapedRow] = []
 
-        try:
-            async with httpx.AsyncClient(
-                timeout=TIMEOUT,
-                headers={"User-Agent": USER_AGENT, "Accept-Language": "uk,en;q=0.9"},
-                follow_redirects=True,
-            ) as client:
+        async with httpx.AsyncClient(
+            timeout=TIMEOUT,
+            headers={"User-Agent": USER_AGENT, "Accept-Language": "uk,en;q=0.9"},
+            follow_redirects=True,
+        ) as client:
+            for page in range(1, MAX_PAGES + 1):
+                page_url = url if page == 1 else _page_url(url, page)
                 await asyncio.sleep(CRAWL_DELAY)
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    logger.warning(f"[{self.name}] {url} returned {resp.status_code}")
-                    return []
-                html = resp.text
-        except Exception as e:
-            logger.error(f"[{self.name}] fetch failed {url}: {e}")
-            return []
+                try:
+                    resp = await client.get(page_url)
+                    if resp.status_code != 200:
+                        if page == 1:
+                            logger.warning(f"[{self.name}] {page_url} returned {resp.status_code}")
+                        break
+                    html = resp.text
+                except Exception as e:
+                    logger.error(f"[{self.name}] fetch failed {page_url}: {e}")
+                    break
 
-        # Try JSON-LD first (fast, no AI needed)
-        jsonld_rows = self._parse_jsonld(html, category, url, today)
-        if jsonld_rows:
-            logger.info(f"[{self.name}] {category}: {len(jsonld_rows)} items via JSON-LD")
-            return jsonld_rows
+                # Try JSON-LD first
+                rows = self._parse_jsonld(html, category, page_url, today)
+                if rows:
+                    logger.info(f"[{self.name}] {category} p{page}: {len(rows)} items via JSON-LD")
+                    all_rows.extend(rows)
+                    if len(rows) < 10:  # last page has fewer items
+                        break
+                    continue
 
-        # Fallback: AI extraction
-        if self._kiro_url and self._kiro_key:
-            ai_rows = await self._parse_with_ai(html, category, url, today)
-            if ai_rows:
-                logger.info(f"[{self.name}] {category}: {len(ai_rows)} items via AI")
-                return ai_rows
+                # Try site-specific HTML parsers
+                rows = self._parse_html(html, category, page_url, today)
+                if rows:
+                    logger.info(f"[{self.name}] {category} p{page}: {len(rows)} items via HTML")
+                    all_rows.extend(rows)
+                    if len(rows) < 10:
+                        break
+                    continue
 
-        logger.warning(f"[{self.name}] {category}: no items extracted from {url}")
-        return []
+                # AI fallback — only on page 1 (too slow for pagination)
+                if page == 1 and self._kiro_url and self._kiro_key:
+                    rows = await self._parse_with_ai(html, category, page_url, today)
+                    if rows:
+                        logger.info(f"[{self.name}] {category}: {len(rows)} items via AI")
+                        all_rows.extend(rows)
+                    else:
+                        logger.warning(f"[{self.name}] {category}: no items extracted from {page_url}")
+                else:
+                    if page == 1:
+                        logger.warning(f"[{self.name}] {category}: no items extracted from {page_url}")
+                break  # no results on this page — stop paginating
+
+        return all_rows
 
     def _parse_jsonld(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
         rows = []
@@ -122,7 +151,6 @@ class GenericAIAdapter:
             except Exception:
                 continue
 
-            # Normalize to a list of candidate items
             candidates = []
             if isinstance(data, list):
                 candidates = data
@@ -146,8 +174,6 @@ class GenericAIAdapter:
 
                 name = item.get("name", "")
                 item_url = item.get("url", url)
-
-                # Price can be in offers, offer, or directly on item
                 offer = item.get("offers") or item.get("offer") or item
                 if isinstance(offer, list):
                     offer = offer[0] if offer else {}
@@ -171,9 +197,43 @@ class GenericAIAdapter:
                     pass
         return rows
 
+    def _parse_html(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
+        """Site-specific HTML parsers keyed by domain."""
+        if "budpostach.ua" in self.base_url:
+            return self._parse_budpostach(html, category, url, today)
+        return []
+
+    def _parse_budpostach(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
+        """
+        Budpostach: product cards have product-thumb__name for title
+        and data-special (discounted) or data-price for price.
+        Extract them in order — they appear in the same sequence.
+        """
+        names = re.findall(r'class="product-thumb__name[^"]*"[^>]*>([^<]{5,120})', html)
+        # data-special is the actual selling price; fall back to data-price
+        prices_raw = re.findall(r'data-special="(\d+)"', html)
+        if not prices_raw:
+            prices_raw = re.findall(r'data-price="(\d+)"', html)
+
+        rows = []
+        for name, price_str in zip(names, prices_raw):
+            name = name.strip()
+            try:
+                price = float(price_str)
+                if price <= 0 or not name:
+                    continue
+                rows.append(ScrapedRow(
+                    category=category, item=name[:100],
+                    price=price, unit="грн",
+                    source_name=self.name, source_url=url,
+                    collected_at=date.today().strftime("%Y-%m"),
+                ))
+            except (ValueError, TypeError):
+                pass
+        return rows
+
     async def _parse_with_ai(self, html: str, category: str,
                               url: str, today: str) -> list[ScrapedRow]:
-        # Strip scripts/styles/tags, keep visible text
         text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
         text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
         text = re.sub(r'<[^>]+>', ' ', text)
@@ -202,7 +262,6 @@ class GenericAIAdapter:
                 )
                 resp.raise_for_status()
                 content = resp.json()["choices"][0]["message"]["content"].strip()
-                # Strip markdown code fences if present
                 content = re.sub(r'^```[a-z]*\n?', '', content)
                 content = re.sub(r'\n?```$', '', content).strip()
                 items = json.loads(content)
@@ -234,10 +293,6 @@ class GenericAIAdapter:
 
 async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: str,
                       worksheet: str, kiro_url: str = "", kiro_key: str = "") -> dict:
-    """
-    Run scraper for a bot. Returns result summary.
-    config = list of {name, base_url, categories: [{name, url}]}
-    """
     from .base import SheetsWriter
 
     all_rows: list[ScrapedRow] = []
