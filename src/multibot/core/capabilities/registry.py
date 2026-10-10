@@ -17,6 +17,8 @@ class CapabilityResult:
     text: str
     data: dict = field(default_factory=dict)
     error: str = ""
+    document: bytes | None = None
+    document_name: str = "result.pdf"
 
 
 @runtime_checkable
@@ -83,6 +85,7 @@ class ShoppingList:
                   collected: dict, params: dict) -> CapabilityResult:
         calc_data = collected.get("_calc_results", {})
         lines = ["📋 Список покупок:"]
+        shopping_results = {}
         for rule_id, info in calc_data.items():
             category = info.get("label", rule_id)
             items = await knowledge.list_items(category)
@@ -92,11 +95,14 @@ class ShoppingList:
                 item = items[0]
                 price_str = knowledge.format_price(item)
                 lines.append(f"• {category}: {qty} {unit} — {price_str}")
+                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": price_str}
             else:
                 lines.append(f"• {category}: {qty} {unit} (ціна не знайдена в каталозі)")
+                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": None}
         if len(lines) == 1:
             return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
-        return CapabilityResult(True, "\n".join(lines))
+        collected["_shopping_results"] = shopping_results
+        return CapabilityResult(True, "\n".join(lines), data=shopping_results)
 
 
 class Checklist:
@@ -162,22 +168,146 @@ class CompareOptions:
         return CapabilityResult(True, "\n".join(lines))
 
 
+# Human-readable labels for collected keys
+_FIELD_LABELS = {
+    "work": "Вид робіт",
+    "room": "Розміри кімнати",
+    "height": "Висота стін (м)",
+}
+
+
 class PrepareRequest:
     name = "prepare_request"
 
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
-        lines = ["📄 Ваш готовий запит:"]
+        calc = collected.get("_calc_results", {})
+        shopping = collected.get("_shopping_results", {})
+
+        # Build text summary
+        lines = ["📄 Ваш розрахунок матеріалів:"]
+        for key, val in collected.items():
+            if key.startswith("_"):
+                continue
+            label = _FIELD_LABELS.get(key, key)
+            lines.append(f"• {label}: {val}")
+        if calc:
+            lines.append("\n📐 Кількість матеріалів:")
+            for info in calc.values():
+                lines.append(f"  {info['label']}: {info['value']} {info['unit']}")
+        if shopping:
+            lines.append("\n🛒 Орієнтовні ціни (середні по ринку):")
+            for entry in shopping.values():
+                lines.append(f"  {entry['label']}: {entry.get('price_str', 'ціна не знайдена')}")
+        lines.append("\n💡 Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.")
+        text = "\n".join(lines)
+
+        # Generate PDF
+        pdf_bytes = _build_pdf(collected, calc, shopping)
+        result = CapabilityResult(True, text, data={"collected": collected})
+        result.document = pdf_bytes
+        result.document_name = f"rozrakhunok_{collected.get('work', 'materialy')}.pdf"
+        return result
+
+
+def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        import io, os
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4,
+                                leftMargin=2*cm, rightMargin=2*cm,
+                                topMargin=2*cm, bottomMargin=2*cm)
+
+        # Try to register a Unicode font for Cyrillic; fall back to built-in
+        font_name = "Helvetica"
+        for path in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"]:
+            if os.path.exists(path):
+                try:
+                    pdfmetrics.registerFont(TTFont("CyrFont", path))
+                    font_name = "CyrFont"
+                except Exception:
+                    pass
+                break
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle("title", fontName=font_name, fontSize=16,
+                                     spaceAfter=12, textColor=colors.HexColor("#1a1a2e"))
+        h2_style = ParagraphStyle("h2", fontName=font_name, fontSize=12,
+                                  spaceBefore=12, spaceAfter=6,
+                                  textColor=colors.HexColor("#16213e"))
+        body_style = ParagraphStyle("body", fontName=font_name, fontSize=10, spaceAfter=4)
+        note_style = ParagraphStyle("note", fontName=font_name, fontSize=9,
+                                    textColor=colors.grey, spaceAfter=4)
+
+        story = []
+        story.append(Paragraph("Розрахунок матеріалів для ремонту", title_style))
+
+        # Parameters section
+        story.append(Paragraph("Параметри", h2_style))
         for key, val in collected.items():
             if not key.startswith("_"):
-                lines.append(f"• {key}: {val}")
-        calc = collected.get("_calc_results", {})
+                label = _FIELD_LABELS.get(key, key)
+                story.append(Paragraph(f"{label}: {val}", body_style))
+
+        # Materials section
         if calc:
-            lines.append("\n📐 Розрахунок:")
+            story.append(Spacer(1, 0.3*cm))
+            story.append(Paragraph("Кількість матеріалів", h2_style))
+            table_data = [["Матеріал", "Кількість", "Одиниця"]]
             for info in calc.values():
-                lines.append(f"• {info['label']}: {info['value']} {info['unit']}")
-        lines.append("\n💡 Передайте цей запит будь-якому обраному постачальнику.")
-        return CapabilityResult(True, "\n".join(lines), data={"collected": collected})
+                table_data.append([info["label"], str(info["value"]), info["unit"]])
+            t = Table(table_data, colWidths=[9*cm, 4*cm, 3*cm])
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f4f8")),
+                ("FONTNAME", (0, 0), (-1, -1), font_name),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9f9f9")]),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]))
+            story.append(t)
+
+        # Prices section
+        if shopping:
+            story.append(Spacer(1, 0.3*cm))
+            story.append(Paragraph("Орієнтовні ціни (середні по ринку)", h2_style))
+            table_data = [["Матеріал", "Ціна"]]
+            for entry in shopping.values():
+                table_data.append([entry["label"], entry.get("price_str", "—")])
+            t = Table(table_data, colWidths=[10*cm, 6*cm])
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f4f8")),
+                ("FONTNAME", (0, 0), (-1, -1), font_name),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9f9f9")]),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]))
+            story.append(t)
+
+        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph(
+            "Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.",
+            note_style
+        ))
+
+        doc.build(story)
+        return buf.getvalue()
+    except Exception as e:
+        logger.warning(f"[pdf] generation failed: {e}")
+        return b""
 
 
 _ALL_CAPABILITIES: list[Capability] = [
