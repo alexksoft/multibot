@@ -188,6 +188,7 @@ async def scraper_page(request: Request, _=Depends(require_session)):
         bots_data.append({
             "name": cfg.name,
             "role": cfg.assistant_profile.assistant_role,
+            "industry": cfg.assistant_profile.industry,
             "sheets_enabled": cfg.knowledge.sheets.enabled,
             "sheet_id": sheet_id,
             "worksheet": bot_scraper.get("worksheet", ""),

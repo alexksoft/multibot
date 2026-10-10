@@ -64,7 +64,7 @@
     <summary style="cursor:pointer;color:#0066cc">🔍 Знайти магазини автоматично (AI)</summary>
     <form method="post" action="/scraper/discover" style="display:flex;gap:0.4rem;margin-top:0.5rem">
       <input type="hidden" name="bot_name" value="{{ bot.name }}">
-      <input name="industry" placeholder="напр. будівельні матеріали" value="{{ bot.role }}" style="flex:1" required>
+      <input name="industry" placeholder="напр. будівельні матеріали" value="{{ bot.industry }}" style="flex:1" required>
       <button style="background:#6f42c1">🔍 Знайти</button>
     </form>
     <small style="color:#888">AI знайде українські магазини, перевірить robots.txt і додасть дозволені до списку.</small>
