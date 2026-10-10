@@ -3,8 +3,8 @@ import logging
 import os
 from functools import partial
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 from .config.sections import BotConfig
 from .context import BotContext
@@ -12,7 +12,7 @@ from .core.ai_orchestrator import AIOrchestrator
 from .core.capabilities.registry import CapabilityRegistry
 from .core.catalog import make_catalog_provider
 from .core.dialog_log import log_message
-from .core.flow import FlowEngine
+from .core.flow import FlowEngine, BotResponse
 from .core.integrations.delivery import ResultDelivery
 from .core.knowledge import KnowledgeBase
 from .core.providers.kiro_gateway import FallbackProvider, KiroGatewayProvider
@@ -22,7 +22,36 @@ from .core.storage import Storage
 logger = logging.getLogger(__name__)
 
 
-def _build_context(cfg: BotConfig, storage: Storage, settings) -> BotContext:
+def _make_reply_markup(keyboard: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup | None:
+    if not keyboard:
+        return None
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(label, callback_data=data) for label, data in row]
+        for row in keyboard
+    ])
+
+
+async def _send_response(message_or_query, response: BotResponse, is_callback: bool = False):
+    """Send BotResponse — text + optional keyboard + optional document."""
+    markup = _make_reply_markup(response.keyboard)
+    if is_callback:
+        chat = message_or_query.message.chat
+        send_text = message_or_query.message.reply_text
+        send_doc = message_or_query.message.reply_document
+    else:
+        send_text = message_or_query.reply_text
+        send_doc = message_or_query.reply_document
+
+    await send_text(response.text, reply_markup=markup)
+    if response.document:
+        import io
+        await send_doc(
+            document=io.BytesIO(response.document),
+            filename=response.document_name,
+            caption="📄 Ваш розрахунок у PDF",
+        )
+
+
     catalog = make_catalog_provider(
         cfg.knowledge.sheets,
         cfg.knowledge.catalog,
@@ -69,14 +98,13 @@ class BotManager:
     def _make_handlers(self, ctx: BotContext):
         async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             profile = ctx.config.assistant_profile
-            text = (
-                f"👋 {profile.assistant_role}\n\n"
-                f"ℹ️ {profile.disclaimer}\n\n"
-                + ctx.flow_engine._build_menu()
+            resp = BotResponse(
+                text=f"👋 {profile.assistant_role}\n\nℹ️ {profile.disclaimer}",
+                keyboard=ctx.flow_engine._menu_response().keyboard,
             )
-            await update.message.reply_text(text)
+            await _send_response(update.message, resp)
             log_message(
-                ctx.config.name, update.effective_user.id, "out", text,
+                ctx.config.name, update.effective_user.id, "out", resp.text,
                 enabled=self._settings.dialog_log_enabled,
                 sheet_id=self._settings.dialog_log_sheet,
                 creds_path=self._settings.google_creds_path,
@@ -103,10 +131,34 @@ class BotManager:
                 response = await ctx.flow_engine.handle(user_id, text)
             except Exception as e:
                 logger.error(f"[{ctx.config.name}] Handler error: {e}", exc_info=True)
-                response = "Виникла помилка. Спробуйте ще раз або введіть /start"
-            await update.message.reply_text(response)
+                response = BotResponse("Виникла помилка. Спробуйте ще раз або введіть /start")
+            await _send_response(update.message, response)
             log_message(
-                ctx.config.name, user_id, "out", response,
+                ctx.config.name, user_id, "out", response.text,
+                enabled=self._settings.dialog_log_enabled,
+                sheet_id=self._settings.dialog_log_sheet,
+                creds_path=self._settings.google_creds_path,
+            )
+
+        async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            query = update.callback_query
+            await query.answer()
+            user_id = query.from_user.id
+            data = query.data or ""
+            log_message(
+                ctx.config.name, user_id, "in", data,
+                enabled=self._settings.dialog_log_enabled,
+                sheet_id=self._settings.dialog_log_sheet,
+                creds_path=self._settings.google_creds_path,
+            )
+            try:
+                response = await ctx.flow_engine.handle(user_id, data)
+            except Exception as e:
+                logger.error(f"[{ctx.config.name}] Button error: {e}", exc_info=True)
+                response = BotResponse("Виникла помилка. Спробуйте ще раз.")
+            await _send_response(query, response, is_callback=True)
+            log_message(
+                ctx.config.name, user_id, "out", response.text,
                 enabled=self._settings.dialog_log_enabled,
                 sheet_id=self._settings.dialog_log_sheet,
                 creds_path=self._settings.google_creds_path,
@@ -115,7 +167,7 @@ class BotManager:
         async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"[{ctx.config.name}] Telegram error: {context.error}", exc_info=context.error)
 
-        return start, stats_cmd, message, error_handler
+        return start, stats_cmd, message, button, error_handler
 
     def build(self) -> None:
         seen_tokens: dict[str, str] = {}
@@ -132,9 +184,10 @@ class BotManager:
             ctx = _build_context(cfg, self._storage, self._settings)
             app = Application.builder().token(token).build()
 
-            start, stats_cmd, message, error_handler = self._make_handlers(ctx)
+            start, stats_cmd, message, button, error_handler = self._make_handlers(ctx)
             app.add_handler(CommandHandler("start", start))
             app.add_handler(CommandHandler("stats", stats_cmd))
+            app.add_handler(CallbackQueryHandler(button))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message))
             app.add_error_handler(error_handler)
 

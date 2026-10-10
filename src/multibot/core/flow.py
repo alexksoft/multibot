@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ..config.sections import ConversationFlows, Flow, Step
@@ -13,11 +14,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SESSION_TIMEOUT_SECONDS = 3600  # 1 hour
+SESSION_TIMEOUT_SECONDS = 3600
+
+
+@dataclass
+class BotResponse:
+    text: str
+    # Each inner list is one row of buttons: [(label, callback_data), ...]
+    keyboard: list[list[tuple[str, str]]] = field(default_factory=list)
+    # Optional file to send as document
+    document: bytes | None = None
+    document_name: str = "result.pdf"
 
 
 def _parse_dimension(text: str) -> tuple[float, float] | None:
-    """Parse '4x5' or '4.5x3.2' into (width, length)."""
     m = re.match(r"^\s*(\d+(?:[.,]\d+)?)\s*[xXхХ*]\s*(\d+(?:[.,]\d+)?)\s*$", text.strip())
     if m:
         return float(m.group(1).replace(",", ".")), float(m.group(2).replace(",", "."))
@@ -25,7 +35,6 @@ def _parse_dimension(text: str) -> tuple[float, float] | None:
 
 
 def _validate_answer(step: Step, text: str) -> tuple[bool, str]:
-    """Validate user answer for a question step. Returns (valid, error_msg)."""
     if step.question_type == "number":
         try:
             val = float(text.replace(",", "."))
@@ -61,6 +70,20 @@ def _eval_transition(when: str, collected: dict) -> bool:
         return False
 
 
+def _menu_keyboard(flows: dict) -> list[list[tuple[str, str]]]:
+    """One button per flow, one per row."""
+    return [[(flow.title, f"flow:{flow.id}")] for flow in flows.values()]
+
+
+def _choice_keyboard(options: list[str], prefix: str = "choice") -> list[list[tuple[str, str]]]:
+    """Two options per row."""
+    rows = []
+    for i in range(0, len(options), 2):
+        row = [(opt, f"{prefix}:{opt}") for opt in options[i:i+2]]
+        rows.append(row)
+    return rows
+
+
 class FlowEngine:
     def __init__(
         self,
@@ -78,7 +101,7 @@ class FlowEngine:
         self._caps = capabilities
         self._ai = ai
         self._bot_name = bot_name
-        self._log = log_fn  # dialog_log.log_message partial
+        self._log = log_fn
 
     def _get_step(self, flow: Flow, step_id: str) -> Step | None:
         for s in flow.steps:
@@ -92,108 +115,128 @@ class FlowEngine:
             lines.append(f"{i}. {flow.title}")
         return "\n".join(lines)
 
-    async def handle(self, user_id: int, text: str) -> str:
+    def _menu_response(self) -> BotResponse:
+        return BotResponse(
+            text=self._menu_title,
+            keyboard=_menu_keyboard(self._flows),
+        )
+
+    async def handle(self, user_id: int, text: str) -> BotResponse:
         text_stripped = text.strip()
         text_lower = text_stripped.lower()
 
-        # Cancel command
         if text_lower in self._cancel_commands:
             await self._storage.clear_state(self._bot_name, user_id)
-            return "Скасовано. " + self._build_menu()
+            return self._menu_response()
 
         state = await self._storage.get_state(self._bot_name, user_id)
 
-        # Check session timeout
         if state:
             from datetime import datetime, timezone
-            import time
             age = (datetime.now(timezone.utc) - state.updated_at).total_seconds()
             if age > SESSION_TIMEOUT_SECONDS:
                 await self._storage.clear_state(self._bot_name, user_id)
                 state = None
 
-        # No active flow — show menu or start flow by number/name
         if not state or not state.flow_id:
             flow_list = list(self._flows.values())
-            # Try to match by number
+
+            # Button callback: "flow:estimate"
+            if text_lower.startswith("flow:"):
+                flow_id = text_stripped[5:]
+                flow = self._flows.get(flow_id)
+                if flow:
+                    return await self._start_flow(user_id, flow)
+
+            # Button callback: "choice:Плитка"
+            if text_lower.startswith("choice:"):
+                answer = text_stripped[7:]
+                for flow in flow_list:
+                    first_step = self._get_step(flow, flow.start)
+                    if first_step and first_step.question_type == "choice" and first_step.options:
+                        if answer.lower() in [o.lower() for o in first_step.options]:
+                            return await self._start_flow_with_answer(user_id, flow, answer)
+
             if text_stripped.isdigit():
                 idx = int(text_stripped) - 1
                 if 0 <= idx < len(flow_list):
                     return await self._start_flow(user_id, flow_list[idx])
-            # Try to match by title or any keyword from title
+
             for flow in flow_list:
                 if text_lower in flow.title.lower() or flow.id == text_lower:
                     return await self._start_flow(user_id, flow)
-            # Check if user input matches a choice option in the first step of any flow
-            # (e.g. user types "плитка" which is an option in the estimate flow)
+
             for flow in flow_list:
                 first_step = self._get_step(flow, flow.start)
                 if first_step and first_step.question_type == "choice" and first_step.options:
-                    opts_lower = [o.lower() for o in first_step.options]
-                    if text_lower in opts_lower:
-                        # Start the flow and pre-answer the first question
+                    if text_lower in [o.lower() for o in first_step.options]:
                         return await self._start_flow_with_answer(user_id, flow, text_stripped)
-            # AI free-form response — append menu hint
-            response = await self._ai.respond(text_stripped, [], {})
-            menu = self._build_menu()
-            return response + f"\n\n\u2139\ufe0f Щоб отримати точний розрахунок, скористайтесь меню:\n{menu}"
 
-        # Active flow
+            ai_text = await self._ai.respond(text_stripped, [], {})
+            return BotResponse(
+                text=ai_text + f"\n\nℹ️ Скористайтесь меню:",
+                keyboard=_menu_keyboard(self._flows),
+            )
+
         flow = self._flows.get(state.flow_id)
         if not flow:
             await self._storage.clear_state(self._bot_name, user_id)
-            return self._build_menu()
+            return self._menu_response()
 
         step = self._get_step(flow, state.step_id)
         if not step:
             await self._storage.clear_state(self._bot_name, user_id)
-            return self._build_menu()
+            return self._menu_response()
+
+        # Unwrap choice callback during active flow
+        if text_lower.startswith("choice:"):
+            text_stripped = text_stripped[7:]
 
         return await self._execute_step(user_id, flow, step, state, text_stripped)
 
-    async def _start_flow(self, user_id: int, flow: Flow) -> str:
+    async def _start_flow(self, user_id: int, flow: Flow) -> BotResponse:
         state = DialogState(self._bot_name, user_id, flow.id, flow.start)
         await self._storage.save_state(state)
         step = self._get_step(flow, flow.start)
         if not step:
-            return "Помилка конфігурації сценарію."
+            return BotResponse("Помилка конфігурації сценарію.")
         return await self._execute_step(user_id, flow, step, state, "")
 
-    async def _start_flow_with_answer(self, user_id: int, flow: Flow, answer: str) -> str:
-        """Start a flow and immediately provide the answer to the first question."""
+    async def _start_flow_with_answer(self, user_id: int, flow: Flow, answer: str) -> BotResponse:
         state = DialogState(self._bot_name, user_id, flow.id, flow.start)
         await self._storage.save_state(state)
         step = self._get_step(flow, flow.start)
         if not step:
-            return "Помилка конфігурації сценарію."
+            return BotResponse("Помилка конфігурації сценарію.")
         return await self._execute_step(user_id, flow, step, state, answer)
 
     async def _execute_step(self, user_id: int, flow: Flow, step: Step,
-                             state: DialogState, user_input: str) -> str:
+                             state: DialogState, user_input: str) -> BotResponse:
         if step.kind == "message":
-            response = step.text or ""
+            response_text = step.text or ""
             next_step_id = step.next
             if next_step_id:
                 next_step = self._get_step(flow, next_step_id)
                 if next_step:
                     state.step_id = next_step_id
                     await self._storage.save_state(state)
-                    next_response = await self._execute_step(user_id, flow, next_step, state, "")
-                    return response + "\n" + next_response if next_response else response
+                    next_resp = await self._execute_step(user_id, flow, next_step, state, "")
+                    combined = (response_text + "\n" + next_resp.text).strip() if next_resp.text else response_text
+                    return BotResponse(combined, next_resp.keyboard, next_resp.document, next_resp.document_name)
             else:
                 await self._storage.clear_state(self._bot_name, user_id)
-            return response
+            return BotResponse(response_text)
 
         elif step.kind == "question":
-            # If we have user_input, validate it
             if user_input:
                 valid, err = _validate_answer(step, user_input)
                 if not valid:
-                    return err + f"\n{step.text}"
-                # Save answer
+                    resp = BotResponse(err + f"\n{step.text}")
+                    if step.question_type == "choice" and step.options:
+                        resp.keyboard = _choice_keyboard(step.options)
+                    return resp
                 if step.save_as:
                     state.collected[step.save_as] = user_input
-                # Determine next step
                 next_id = self._resolve_next(step, state.collected)
                 if next_id:
                     next_step = self._get_step(flow, next_id)
@@ -202,13 +245,13 @@ class FlowEngine:
                         await self._storage.save_state(state)
                         return await self._execute_step(user_id, flow, next_step, state, "")
                 await self._storage.clear_state(self._bot_name, user_id)
-                return self._build_menu()
+                return self._menu_response()
             else:
-                # Ask the question
                 text = step.text or ""
+                keyboard = []
                 if step.question_type == "choice" and step.options:
-                    text += "\n" + "\n".join(f"• {o}" for o in step.options)
-                return text
+                    keyboard = _choice_keyboard(step.options)
+                return BotResponse(text, keyboard)
 
         elif step.kind == "capability":
             cap_name = step.capability or ""
@@ -221,16 +264,21 @@ class FlowEngine:
                 if next_step:
                     state.step_id = next_id
                     await self._storage.save_state(state)
-                    next_response = await self._execute_step(user_id, flow, next_step, state, "")
-                    return result.text + ("\n\n" + next_response if next_response else "")
+                    next_resp = await self._execute_step(user_id, flow, next_step, state, "")
+                    combined = (result.text + "\n\n" + next_resp.text).strip() if next_resp.text else result.text
+                    return BotResponse(combined, next_resp.keyboard, next_resp.document, next_resp.document_name)
             await self._storage.clear_state(self._bot_name, user_id)
-            return result.text
+            # prepare_request returns document
+            if result.document:
+                return BotResponse(result.text, keyboard=_menu_keyboard(self._flows),
+                                   document=result.document, document_name=result.document_name)
+            return BotResponse(result.text, keyboard=_menu_keyboard(self._flows))
 
         elif step.kind == "handoff":
             await self._storage.clear_state(self._bot_name, user_id)
-            return step.text or "Передаю запит. " + self._build_menu()
+            return BotResponse(step.text or "Передаю запит.", keyboard=_menu_keyboard(self._flows))
 
-        return self._build_menu()
+        return self._menu_response()
 
     def _resolve_next(self, step: Step, collected: dict) -> str | None:
         for t in step.transitions:
