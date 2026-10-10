@@ -52,6 +52,7 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
         )
 
 
+def _build_context(cfg: BotConfig, storage: Storage, settings) -> BotContext:
     catalog = make_catalog_provider(
         cfg.knowledge.sheets,
         cfg.knowledge.catalog,
