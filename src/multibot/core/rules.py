@@ -49,22 +49,30 @@ class RuleEngine:
 
         # Expand dimension variables (e.g. room → room_width, room_length, room_area)
         for key, val in collected.items():
-            if isinstance(val, str) and "x" in val.lower():
-                parts = val.lower().replace(",", ".").split("x")
-                if len(parts) == 2:
+            if isinstance(val, str):
+                # Normalize Cyrillic х/Х to Latin x before dimension check
+                normalized = val.replace('\u0445', 'x').replace('\u0425', 'x')
+                if "x" in normalized.lower():
+                    parts = normalized.lower().replace(",", ".").split("x")
+                    if len(parts) == 2:
+                        try:
+                            w, l = float(parts[0].strip()), float(parts[1].strip())
+                            variables[f"{key}_width"] = w
+                            variables[f"{key}_length"] = l
+                            variables[f"{key}_area"] = w * l
+                            variables[f"{key}_perimeter"] = 2 * (w + l)
+                        except ValueError:
+                            pass
+                    else:
+                        try:
+                            variables[key] = float(val)
+                        except (TypeError, ValueError):
+                            pass
+                else:
                     try:
-                        w, l = float(parts[0].strip()), float(parts[1].strip())
-                        variables[f"{key}_width"] = w
-                        variables[f"{key}_length"] = l
-                        variables[f"{key}_area"] = w * l
-                        variables[f"{key}_perimeter"] = 2 * (w + l)
-                    except ValueError:
+                        variables[key] = float(val)
+                    except (TypeError, ValueError):
                         pass
-            else:
-                try:
-                    variables[key] = float(val)
-                except (TypeError, ValueError):
-                    pass
 
         variables.update({k: float(v) for k, v in norms.items()})
 
