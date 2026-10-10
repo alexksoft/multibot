@@ -57,6 +57,14 @@ class SheetsWriter:
             ws.append_row(_SHEET_HEADER)
             return ws
 
+    def ensure_tab_exists(self, worksheet_name: str) -> None:
+        """Create the tab with header if it doesn't exist yet."""
+        try:
+            self._get_ws(worksheet_name)
+            logger.info(f"[sheets] Tab '{worksheet_name}' ready")
+        except Exception as e:
+            logger.warning(f"[sheets] Could not ensure tab '{worksheet_name}': {e}")
+
     def recreate(self, worksheet_name: str, rows: list[ScrapedRow]) -> None:
         """Clear the worksheet and write all rows fresh."""
         ws = self._get_ws(worksheet_name)
