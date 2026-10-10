@@ -4,6 +4,7 @@ Respects robots.txt, uses polite delays, proper User-Agent.
 """
 from __future__ import annotations
 import asyncio
+import json
 import logging
 import re
 from datetime import date
@@ -39,7 +40,6 @@ async def check_robots_async(url: str) -> dict:
     """Check robots.txt for a URL. Returns dict with allowed, delay, details."""
     parsed = urlparse(url)
     base = f"{parsed.scheme}://{parsed.netloc}"
-    path = parsed.path or "/"
     try:
         async with httpx.AsyncClient(timeout=8, headers={"User-Agent": USER_AGENT}) as client:
             r = await client.get(f"{base}/robots.txt")
@@ -78,9 +78,7 @@ class GenericAIAdapter:
 
     async def fetch(self, category: str, url: str) -> list[ScrapedRow]:
         today = date.today().strftime("%Y-%m")
-        rows = []
 
-        # Fetch the page
         try:
             async with httpx.AsyncClient(
                 timeout=TIMEOUT,
@@ -98,7 +96,6 @@ class GenericAIAdapter:
             return []
 
         # Try JSON-LD first (fast, no AI needed)
-        import json
         jsonld_rows = self._parse_jsonld(html, category, url, today)
         if jsonld_rows:
             logger.info(f"[{self.name}] {category}: {len(jsonld_rows)} items via JSON-LD")
@@ -115,7 +112,6 @@ class GenericAIAdapter:
         return []
 
     def _parse_jsonld(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
-        import json
         rows = []
         for match in re.findall(
             r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
@@ -123,180 +119,117 @@ class GenericAIAdapter:
         ):
             try:
                 data = json.loads(match.strip())
-                items = []
-                if isinstance(data, dict) and data.get("@type") == "ItemList":
-                    items = data.get("itemListElement", [])
-                elif isinstance(data, list):
-                    items = data
-                for item in items:
-                    if not isinstance(item, dict):
-                        continue
-                    offer = item.get("offers") or item.get("offer") or {}
-                    if isinstance(offer, list):
-                        offer = offer[0] if offer else {}
-                    price = offer.get("price") or item.get("price")
-                    name = item.get("name", "")
-                    item_url = item.get("url", url)
-                    if price and name:
-                        try:
-                            rows.append(ScrapedRow(
-                                category=category, item=name[:100],
-                                price=float(str(price).replace(" ", "").replace(",", ".")),
-                                unit="грн", source_name=self.name,
-                                source_url=item_url, collected_at=today,
-                            ))
-                        except (ValueError, TypeError):
-                            pass
             except Exception:
-                pass
+                continue
+
+            # Normalize to a list of candidate items
+            candidates = []
+            if isinstance(data, list):
+                candidates = data
+            elif isinstance(data, dict):
+                t = data.get("@type", "")
+                if t == "ItemList":
+                    candidates = data.get("itemListElement", [])
+                elif t in ("Product", "Offer"):
+                    candidates = [data]
+                elif "@graph" in data:
+                    candidates = data["@graph"]
+
+            for item in candidates:
+                if not isinstance(item, dict):
+                    continue
+                # Unwrap ListItem → item
+                if item.get("@type") == "ListItem" and "item" in item:
+                    item = item["item"]
+                if not isinstance(item, dict):
+                    continue
+
+                name = item.get("name", "")
+                item_url = item.get("url", url)
+
+                # Price can be in offers, offer, or directly on item
+                offer = item.get("offers") or item.get("offer") or item
+                if isinstance(offer, list):
+                    offer = offer[0] if offer else {}
+                price_raw = offer.get("price") if isinstance(offer, dict) else None
+                if price_raw is None:
+                    price_raw = item.get("price")
+
+                if not name or price_raw is None:
+                    continue
+                try:
+                    price = float(str(price_raw).replace(" ", "").replace(",", "."))
+                    if price <= 0:
+                        continue
+                    rows.append(ScrapedRow(
+                        category=category, item=name[:100],
+                        price=price, unit="грн",
+                        source_name=self.name, source_url=item_url,
+                        collected_at=today,
+                    ))
+                except (ValueError, TypeError):
+                    pass
         return rows
 
     async def _parse_with_ai(self, html: str, category: str,
                               url: str, today: str) -> list[ScrapedRow]:
-        import json
-        # Trim HTML to fit in context — keep first 8000 chars (product listings are near top)
-        html_snippet = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
-        html_snippet = re.sub(r'<style[^>]*>.*?</style>', '', html_snippet, flags=re.DOTALL)
-        html_snippet = re.sub(r'<[^>]+>', ' ', html_snippet)
-        html_snippet = re.sub(r'\s+', ' ', html_snippet).strip()[:6000]
+        # Strip scripts/styles/tags, keep visible text
+        text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()[:6000]
 
         prompt = (
-            f"Extract product listings from this Ukrainian shop page for category '{category}'.\n"
-            f"Page URL: {url}\n"
-            f"Return ONLY a JSON array, no markdown. Each item:\n"
-            f'{{"name": "product name", "price": 123.0, "unit": "грн"}}\n'
-            f"Extract up to 30 items. If no prices found, return [].\n\n"
-            f"Page text:\n{html_snippet}"
+            f"You are a price extraction bot. Extract ALL product listings from this Ukrainian shop page.\n"
+            f"Category: '{category}'. Page: {url}\n"
+            f"Rules:\n"
+            f"- Return ONLY a JSON array, no markdown, no explanation\n"
+            f"- Each element: {{\"name\": \"full product name\", \"price\": 123.0}}\n"
+            f"- price must be a number (UAH), not a string\n"
+            f"- Skip items without a clear price\n"
+            f"- Extract up to 30 items\n"
+            f"- If no products found, return []\n\n"
+            f"Page text:\n{text}"
         )
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=45) as client:
                 resp = await client.post(
                     f"{self._kiro_url}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {self._kiro_key}",
                              "Content-Type": "application/json"},
-                    json={"model": "claude-haiku-4.5", "max_tokens": 1500,
+                    json={"model": "claude-haiku-4.5", "max_tokens": 2000,
                           "messages": [{"role": "user", "content": prompt}]},
                 )
                 resp.raise_for_status()
-                content = resp.json()["choices"][0]["message"]["content"]
-                content = content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                content = resp.json()["choices"][0]["message"]["content"].strip()
+                # Strip markdown code fences if present
+                content = re.sub(r'^```[a-z]*\n?', '', content)
+                content = re.sub(r'\n?```$', '', content).strip()
                 items = json.loads(content)
                 rows = []
                 for item in items:
                     if not isinstance(item, dict):
                         continue
-                    price = item.get("price")
-                    name = item.get("name", "")
-                    if price and name:
+                    name = str(item.get("name", "")).strip()
+                    price_raw = item.get("price")
+                    if not name or price_raw is None:
+                        continue
+                    try:
+                        price = float(str(price_raw).replace(" ", "").replace(",", "."))
+                        if price <= 0:
+                            continue
                         rows.append(ScrapedRow(
-                            category=category, item=str(name)[:100],
-                            price=float(price), unit=item.get("unit", "грн"),
+                            category=category, item=name[:100],
+                            price=price, unit="грн",
                             source_name=self.name, source_url=url,
-                            collected_at=date.today().strftime("%Y-%m"),
+                            collected_at=today,
                         ))
+                    except (ValueError, TypeError):
+                        pass
                 return rows
         except Exception as e:
-            logger.warning(f"[{self.name}] AI parse failed: {e}")
+            logger.warning(f"[{self.name}] AI parse failed for {url}: {e}")
             return []
-    """Scrapes product listings from epicentrk.ua category pages."""
-    name = "Епіцентр"
-    base_url = "https://epicentrk.ua"
-
-    async def fetch(self, category: str, url: str) -> list[ScrapedRow]:
-        today = date.today().strftime("%Y-%m")
-        rows = []
-
-        try:
-            async with httpx.AsyncClient(
-                timeout=TIMEOUT,
-                headers={
-                    "User-Agent": USER_AGENT,
-                    "Accept-Language": "uk,en;q=0.9",
-                    "Accept": "text/html,application/xhtml+xml",
-                },
-                follow_redirects=True,
-            ) as client:
-                await asyncio.sleep(CRAWL_DELAY)
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    logger.warning(f"[epicentr] {url} returned {resp.status_code}")
-                    return []
-                html = resp.text
-        except Exception as e:
-            logger.error(f"[epicentr] fetch failed {url}: {e}")
-            return []
-
-        # Parse product cards — Epicentr uses structured data in JSON-LD
-        # Try JSON-LD first (most reliable)
-        import json
-        jsonld_matches = re.findall(
-            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
-            html, re.DOTALL
-        )
-        for match in jsonld_matches:
-            try:
-                data = json.loads(match.strip())
-                items = []
-                if isinstance(data, dict) and data.get("@type") == "ItemList":
-                    items = data.get("itemListElement", [])
-                elif isinstance(data, list):
-                    items = data
-                for item in items:
-                    if isinstance(item, dict):
-                        offer = item.get("offers", item.get("offer", {}))
-                        if isinstance(offer, list):
-                            offer = offer[0] if offer else {}
-                        price = offer.get("price") or item.get("price")
-                        name = item.get("name", "")
-                        item_url = item.get("url", url)
-                        if price and name:
-                            try:
-                                rows.append(ScrapedRow(
-                                    category=category,
-                                    item=name[:100],
-                                    price=float(str(price).replace(" ", "").replace(",", ".")),
-                                    unit="грн",
-                                    source_name=self.name,
-                                    source_url=item_url,
-                                    collected_at=today,
-                                ))
-                            except (ValueError, TypeError):
-                                pass
-            except (json.JSONDecodeError, Exception):
-                pass
-
-        # Fallback: parse HTML price patterns
-        if not rows:
-            rows = self._parse_html(html, category, url, today)
-
-        logger.info(f"[epicentr] {category}: {len(rows)} items from {url}")
-        return rows  # no artificial limit
-
-    def _parse_html(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
-        """Fallback HTML parser for product names and prices."""
-        rows = []
-        # Match price patterns like: 1 234 грн, 450грн
-        price_pattern = re.compile(r'(\d[\d\s]{1,8})\s*грн', re.IGNORECASE)
-        # Match product title patterns
-        title_pattern = re.compile(
-            r'(?:class="[^"]*(?:title|name|product)[^"]*"[^>]*>|<h[23][^>]*>)\s*([^<]{5,100})',
-            re.IGNORECASE
-        )
-        titles = [m.group(1).strip() for m in title_pattern.finditer(html)][:20]
-        prices = [float(m.group(1).replace(" ", "")) for m in price_pattern.finditer(html)][:20]
-
-        for i, (title, price) in enumerate(zip(titles, prices)):
-            if price > 0:
-                rows.append(ScrapedRow(
-                    category=category,
-                    item=title[:100],
-                    price=price,
-                    unit="грн",
-                    source_name=self.name,
-                    source_url=url,
-                    collected_at=today,
-                ))
-        return rows
 
 
 async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: str,
@@ -305,7 +238,7 @@ async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: st
     Run scraper for a bot. Returns result summary.
     config = list of {name, base_url, categories: [{name, url}]}
     """
-    from .base import SheetsWriter, ScrapedRow, _SHEET_HEADER
+    from .base import SheetsWriter
 
     all_rows: list[ScrapedRow] = []
     errors = []
@@ -319,7 +252,6 @@ async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: st
             cat_name = cat["name"]
             cat_url = cat["url"]
 
-            # Check robots.txt
             result = await check_robots_async(cat_url)
             if not result["allowed"]:
                 msg = f"{source_name}/{cat_name}: заборонено robots.txt"
@@ -327,7 +259,6 @@ async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: st
                 skipped.append(msg)
                 continue
 
-            # Scrape using universal AI adapter
             try:
                 adapter = GenericAIAdapter(
                     source_name=source_name,
@@ -343,7 +274,6 @@ async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: st
                 logger.error(f"[scraper] {msg}")
                 errors.append(msg)
 
-    # Write to Sheets
     written = 0
     if all_rows and sheet_id and creds_path:
         try:
