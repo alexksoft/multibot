@@ -34,9 +34,18 @@ conversation_flows:
           next: ask_room
         - id: ask_room
           kind: question
-          text: "Розміри кімнати (ШxД), напр. 4x5:"
+          text: "Розміри кімнати (ШxД):"
           question_type: dimension
           unit: "м"
+          suggestions:
+            - "3x3"
+            - "3x4"
+            - "4x4"
+            - "4x5"
+            - "3x5"
+            - "5x5"
+            - "3x6"
+            - "6x4"
           save_as: room
           next: ask_height
         - id: ask_height
@@ -46,6 +55,11 @@ conversation_flows:
           unit: "м"
           min: 2
           max: 5
+          suggestions:
+            - "2.5"
+            - "2.7"
+            - "2.8"
+            - "3.0"
           save_as: height
           next: do_calc
         - id: do_calc
