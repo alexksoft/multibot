@@ -345,5 +345,7 @@ async def run_scraper(
         creds_path=settings.google_creds_path,
         sheet_id=sheet_id,
         worksheet=worksheet,
+        kiro_url=settings.kiro_gateway_url,
+        kiro_key=settings.kiro_gateway_api_key,
     )
     return templates.TemplateResponse("scraper_result.html", {"request": request, "result": result})
