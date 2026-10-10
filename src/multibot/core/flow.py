@@ -120,13 +120,23 @@ class FlowEngine:
                 idx = int(text_stripped) - 1
                 if 0 <= idx < len(flow_list):
                     return await self._start_flow(user_id, flow_list[idx])
-            # Try to match by title
+            # Try to match by title or any keyword from title
             for flow in flow_list:
                 if text_lower in flow.title.lower() or flow.id == text_lower:
                     return await self._start_flow(user_id, flow)
-            # AI free-form response
+            # Check if user input matches a choice option in the first step of any flow
+            # (e.g. user types "плитка" which is an option in the estimate flow)
+            for flow in flow_list:
+                first_step = self._get_step(flow, flow.start)
+                if first_step and first_step.question_type == "choice" and first_step.options:
+                    opts_lower = [o.lower() for o in first_step.options]
+                    if text_lower in opts_lower:
+                        # Start the flow and pre-answer the first question
+                        return await self._start_flow_with_answer(user_id, flow, text_stripped)
+            # AI free-form response — append menu hint
             response = await self._ai.respond(text_stripped, [], {})
-            return response
+            menu = self._build_menu()
+            return response + f"\n\n\u2139\ufe0f Щоб отримати точний розрахунок, скористайтесь меню:\n{menu}"
 
         # Active flow
         flow = self._flows.get(state.flow_id)
@@ -148,6 +158,15 @@ class FlowEngine:
         if not step:
             return "Помилка конфігурації сценарію."
         return await self._execute_step(user_id, flow, step, state, "")
+
+    async def _start_flow_with_answer(self, user_id: int, flow: Flow, answer: str) -> str:
+        """Start a flow and immediately provide the answer to the first question."""
+        state = DialogState(self._bot_name, user_id, flow.id, flow.start)
+        await self._storage.save_state(state)
+        step = self._get_step(flow, flow.start)
+        if not step:
+            return "Помилка конфігурації сценарію."
+        return await self._execute_step(user_id, flow, step, state, answer)
 
     async def _execute_step(self, user_id: int, flow: Flow, step: Step,
                              state: DialogState, user_input: str) -> str:

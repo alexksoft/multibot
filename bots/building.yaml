@@ -84,27 +84,21 @@ capabilities:
 # 4. Knowledge & Data
 knowledge:
   version: 1
-  # Матриця реальних цін (наповнює скрейпер). Кожна ціна — з магазином-джерелом.
   sheets:
     enabled: true
     sheet_id_env: BUILDING_SHEET_ID
     worksheet: "Матеріали"
     cache_ttl_seconds: 300
   calculation_rules:
-    # Загальні
-    - { id: wall_area,   label: "Площа стін",    expression: "(room_width + room_length) * 2 * height", unit: "м²", round_to: 1 }
-    - { id: floor_area,  label: "Площа підлоги", expression: "room_width * room_length",                unit: "м²", round_to: 1 }
-    # Штукатурка
-    - { id: plaster_kg,  label: "Штукатурка",    expression: "wall_area * norms_plaster",  unit: "кг", round_to: 0 }
-    - { id: primer_l,    label: "Ґрунтовка",     expression: "wall_area * norms_primer",   unit: "л",  round_to: 1 }
-    # Шпаклівка
-    - { id: putty_kg,    label: "Шпаклівка",     expression: "wall_area * norms_putty",    unit: "кг", round_to: 0 }
-    # Фарбування
-    - { id: paint_l,     label: "Фарба",          expression: "wall_area * norms_paint",    unit: "л",  round_to: 1 }
-    # Плитка
-    - { id: tile_m2,     label: "Плитка",         expression: "floor_area * norms_tile_waste", unit: "м²", round_to: 1 }
-    - { id: tile_glue_kg,label: "Клей для плитки",expression: "floor_area * norms_tile_glue",  unit: "кг", round_to: 0 }
-    - { id: grout_kg,    label: "Затирка швів",   expression: "floor_area * norms_grout",      unit: "кг", round_to: 1 }
+    - { id: wall_area,    label: "Площа стін",      expression: "(room_width + room_length) * 2 * height", unit: "м²", round_to: 1 }
+    - { id: floor_area,   label: "Площа підлоги",   expression: "room_width * room_length",                unit: "м²", round_to: 1 }
+    - { id: plaster_kg,   label: "Штукатурка",      expression: "wall_area * norms_plaster",               unit: "кг", round_to: 0 }
+    - { id: primer_l,     label: "Ґрунтовка",       expression: "wall_area * norms_primer",                unit: "л",  round_to: 1 }
+    - { id: putty_kg,     label: "Шпаклівка",       expression: "wall_area * norms_putty",                 unit: "кг", round_to: 0 }
+    - { id: paint_l,      label: "Фарба",            expression: "wall_area * norms_paint",                 unit: "л",  round_to: 1 }
+    - { id: tile_m2,      label: "Плитка",           expression: "floor_area * norms_tile_waste",           unit: "м²", round_to: 1 }
+    - { id: tile_glue_kg, label: "Клей для плитки",  expression: "floor_area * norms_tile_glue",            unit: "кг", round_to: 0 }
+    - { id: grout_kg,     label: "Затирка швів",     expression: "floor_area * norms_grout",                unit: "кг", round_to: 1 }
   norms:
     norms_plaster: 8.5
     norms_primer: 0.15
@@ -118,10 +112,6 @@ knowledge:
     шпаклівка: [wall_area, putty_kg, primer_l]
     фарбування: [wall_area, paint_l, primer_l]
     плитка: [floor_area, tile_m2, tile_glue_kg, grout_kg]
-  # catalog — локальний резерв, якщо Google Sheets недоступний (шаблон):
-  # catalog:
-  #   - { category: "Фарба", item: "Інтер'єрна біла 10л", price: 450, unit: "грн",
-  #       source_name: "Епіцентр", source_url: "https://...", collected_at: "2026-10", active: true }
   faq:
     - question: "Скільки сохне штукатурка?"
       answer: "Залежно від шару та вологості — зазвичай від 1 до 2 діб."
@@ -134,42 +124,24 @@ knowledge:
 ai_policy:
   version: 1
   enabled: true
-  model: claude-opus-4.7
-  max_tokens: 700
+  model: claude-sonnet-4-5
+  max_tokens: 400
   clarify_when_unsure: true
   allowed_tools: ["calculate_materials", "search_products", "shopping_list", "compare_options"]
   forbidden_advice: []
   system_prompt: |
-    Ти — безкоштовний AI-помічник для планування ремонту. Ти НЕ представляєш
-    конкретний магазин чи майстра. Допомагай людям порахувати матеріали й
-    підготуватися до покупки та розмови з майстром.
-    Кількість матеріалів бери ЛИШЕ з результату calculate_materials.
-    Ціни бери ЛИШЕ з матриці (search_products) і ЗАВЖДИ називай разом із магазином-
-    джерелом і датою (напр. «фарба — 450 грн, Епіцентр, 10.2026»). Ніколи не вигадуй
-    цін чи магазинів. Якщо даних немає — чесно скажи. У кінці допоможи сформувати
-    список покупок, який користувач візьме в будь-який магазин.
+    Ти — безкоштовний AI-помічник для планування ремонту. Ти НЕ представляєш конкретний магазин чи майстра.
+    ВАЖЛИВО: якщо користувач просить розрахувати матеріали (плитка, фарба, штукатурка тощо) — НЕ рахуй сам і НЕ питай додаткові дані.
+    Замість цього коротко (1-2 речення) поясни що вмієш і запропонуй скористатися пунктом меню "Розрахувати матеріали".
+    На загальні запитання про матеріали та технології — відповідай коротко і по суті.
+    Ціни ніколи не вигадуй.
 
 # 6. Integrations
 integrations:
   version: 1
   deliver_to_user: true
-  # Збираємо лише дані, потрібні для роботи бота (data minimization).
-  # Персональні контакти не запитуємо. Додати поле за потреби (шаблон):
-  # request_form:
-  #   - { id: name, label: "Ваше ім'я (необов'язково)", type: text, required: false }
   request_form: []
   sinks:
     - type: telegram_manager
       enabled: false
       config: { chat_id_env: BUILDING_MANAGER_CHAT_ID }
-
-# 7. Booking — демо-запис (ВИМКНЕНО для цього бота; шаблон).
-# Фіча спільна; щоб увімкнути демо-запис на консультацію/замір — розкоментуй і постав enabled: true.
-# booking:
-#   version: 1
-#   enabled: true
-#   provider_term: "майстер"
-#   service_term: "робота"
-#   demo_masters: 5
-#   contacts_text: "Демонстраційний сервіс. Реальний запис — після інтеграції з конкретною компанією."
-#   intro: "Можу показати, як працює онлайн-запис на консультацію майстра."
