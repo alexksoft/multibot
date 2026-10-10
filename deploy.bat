@@ -11,20 +11,8 @@ echo ============================================================
 echo   Multibot Deploy ^| %SERVER%
 echo ============================================================
 
-REM --- Git commit + push ---
 echo.
-echo [1/4] Git...
-git add -A
-git status --short
-set /p MSG="Commit message (Enter to skip): "
-if not "%MSG%"=="" (
-    git commit -m "%MSG%"
-)
-git push origin master 2>&1
-
-REM --- Copy all files ---
-echo.
-echo [2/4] Copying files...
+echo [1/3] Copying files...
 %SCP% src         %REMOTE%/
 %SCP% bots        %REMOTE%/
 %SCP% admin       %REMOTE%/
@@ -33,14 +21,12 @@ echo [2/4] Copying files...
 %SCP% main.py     %SERVER%:/home/opc/marketing_multibot_telegram/main.py
 %SCP% requirements.txt %SERVER%:/home/opc/marketing_multibot_telegram/requirements.txt
 
-REM --- Install dependencies ---
 echo.
-echo [3/4] Installing dependencies...
+echo [2/3] Installing dependencies...
 %SSH% "cd /home/opc/marketing_multibot_telegram && .venv/bin/pip install -r requirements.txt -q"
 
-REM --- Restart services ---
 echo.
-echo [4/4] Restarting services...
+echo [3/3] Restarting services...
 %SSH% "sudo systemctl restart multibot multibot-admin"
 timeout /t 5 /nobreak >nul
 %SSH% "sudo systemctl is-active multibot multibot-admin"
@@ -49,6 +35,6 @@ echo.
 echo ============================================================
 echo   Done!
 echo   Admin:  http://130.61.84.155:8600
-echo   Logs:   ssh -i "%%KEY%%" %SERVER% "journalctl -u multibot -f"
+echo   Logs:   ssh -i "%KEY%" %SERVER% "journalctl -u multibot -f"
 echo ============================================================
 endlocal
