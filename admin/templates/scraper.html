@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Скрейпер — Multibot Admin{% endblock %}
+{% block content %}
+<h2>🕷️ Скрейпер цін</h2>
+<p style="color:#666">Налаштуйте джерела для кожного бота, перевірте robots.txt і запустіть збір цін у Google Sheets.</p>
+
+{% for bot in bots %}
+<div class="card" id="{{ bot.name }}">
+  <h3>🤖 {{ bot.name }} <small style="color:#888;font-size:0.8em">{{ bot.role }}</small></h3>
+
+  {% if not bot.sheets_enabled %}
+  <p class="badge badge-warn">⚠️ Google Sheets вимкнено для цього бота</p>
+  {% elif not bot.sheet_id %}
+  <p class="badge badge-off">❌ Sheet ID не задано в .env ({{ bot.name | upper }}_SHEET_ID або GOOGLE_SHEET_ID)</p>
+  {% else %}
+  <p class="badge badge-ok">✓ Sheet ID: {{ bot.sheet_id[:20] }}... | Аркуш: {{ bot.worksheet or "не задано" }}</p>
+  {% endif %}
+
+  <!-- Check robots.txt form -->
+  <details style="margin:0.8rem 0">
+    <summary style="cursor:pointer;color:#0066cc">🔍 Перевірити robots.txt для URL</summary>
+    <form method="post" action="/scraper/check-robots" target="_blank" style="margin-top:0.5rem;display:flex;gap:0.5rem">
+      <input name="url" type="url" placeholder="https://example.com/category/" style="flex:1" required>
+      <button type="submit">Перевірити</button>
+    </form>
+  </details>
+
+  <!-- Sources list -->
+  {% for si, source in bot.sources | enumerate %}
+  <div style="border:1px solid #eee;border-radius:4px;padding:0.8rem;margin:0.5rem 0">
+    <strong>{{ source.name }}</strong> — <code>{{ source.base_url }}</code>
+    <table style="width:100%;margin-top:0.5rem;font-size:0.9em">
+      <tr><th style="text-align:left">Категорія</th><th style="text-align:left">URL</th><th></th></tr>
+      {% for ci, cat in source.categories | enumerate %}
+      <tr>
+        <td>{{ cat.name }}</td>
+        <td><a href="{{ cat.url }}" target="_blank">{{ cat.url[:60] }}...</a></td>
+        <td>
+          <form method="post" action="/scraper/remove-category" style="display:inline">
+            <input type="hidden" name="bot_name" value="{{ bot.name }}">
+            <input type="hidden" name="source_index" value="{{ si }}">
+            <input type="hidden" name="cat_index" value="{{ ci }}">
+            <button style="background:#dc3545;padding:2px 8px;font-size:0.8em">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" style="color:#888">Немає категорій</td></tr>
+      {% endfor %}
+    </table>
+    <!-- Add category -->
+    <form method="post" action="/scraper/add-category" style="display:flex;gap:0.4rem;margin-top:0.5rem">
+      <input type="hidden" name="bot_name" value="{{ bot.name }}">
+      <input type="hidden" name="source_index" value="{{ si }}">
+      <input name="cat_name" placeholder="Назва категорії" style="width:160px" required>
+      <input name="cat_url" type="url" placeholder="https://..." style="flex:1" required>
+      <button>+ Категорія</button>
+    </form>
+  </div>
+  {% endfor %}
+
+  <!-- Add source -->
+  <details style="margin-top:0.5rem">
+    <summary style="cursor:pointer;color:#0066cc">➕ Додати джерело</summary>
+    <form method="post" action="/scraper/add-source" style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap">
+      <input type="hidden" name="bot_name" value="{{ bot.name }}">
+      <input name="source_name" placeholder="Назва (напр. Епіцентр)" style="width:160px" required>
+      <input name="base_url" type="url" placeholder="https://epicentrk.ua" style="flex:1" required>
+      <button>Додати</button>
+    </form>
+  </details>
+
+  <!-- Run scraper -->
+  {% if bot.sheets_enabled and bot.sheet_id and bot.sources %}
+  <form method="post" action="/scraper/run" style="margin-top:1rem">
+    <input type="hidden" name="bot_name" value="{{ bot.name }}">
+    <button style="background:#28a745;font-size:1em;padding:0.5rem 1.5rem">
+      ▶ Запустити скрейпер для {{ bot.name }}
+    </button>
+    <small style="color:#666;margin-left:0.5rem">Перезапише аркуш «{{ bot.worksheet }}» реальними цінами</small>
+  </form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

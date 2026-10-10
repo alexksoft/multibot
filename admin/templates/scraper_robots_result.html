@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Robots.txt — {{ url }}{% endblock %}
+{% block content %}
+<h2>🔍 Перевірка robots.txt</h2>
+<p><strong>URL:</strong> <a href="{{ url }}" target="_blank">{{ url }}</a></p>
+<p><strong>Robots.txt:</strong> <a href="{{ result.robots_url }}" target="_blank">{{ result.robots_url }}</a></p>
+
+{% if result.error %}
+<div class="error">⚠️ Помилка читання robots.txt: {{ result.error }}<br>
+Вважається дозволеним за замовчуванням.</div>
+{% endif %}
+
+<div class="card" style="background:{% if result.allowed %}#d4edda{% else %}#f8d7da{% endif %}">
+  <h3>{% if result.allowed %}✅ Скрейпінг ДОЗВОЛЕНО{% else %}❌ Скрейпінг ЗАБОРОНЕНО{% endif %}</h3>
+  <p>Crawl-delay: {{ result.delay }} сек</p>
+</div>
+
+{% if result.content %}
+<h4>Вміст robots.txt (перші 500 символів):</h4>
+<pre>{{ result.content }}</pre>
+{% endif %}
+
+<p><a href="/scraper">← Назад до скрейпера</a></p>
+{% endblock %}

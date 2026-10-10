@@ -1,0 +1,41 @@
+# Scraper configuration — sources per bot
+# Each source has: url, name, categories to scrape
+# Run via admin panel /scraper or CLI: python -m scraper run --bot building_assistant
+
+bots:
+  building_assistant:
+    worksheet: "Матеріали"
+    sources:
+      - name: "Епіцентр"
+        base_url: "https://epicentrk.ua"
+        categories:
+          - name: "Плитка"
+            url: "https://epicentrk.ua/ua/shop/plitka-keramicheskaya/"
+          - name: "Фарба"
+            url: "https://epicentrk.ua/ua/shop/kraska/"
+          - name: "Штукатурка"
+            url: "https://epicentrk.ua/ua/shop/shtukaturka/"
+          - name: "Шпаклівка"
+            url: "https://epicentrk.ua/ua/shop/shpaklevka/"
+          - name: "Ґрунтовка"
+            url: "https://epicentrk.ua/ua/shop/grunt/"
+          - name: "Клей для плитки"
+            url: "https://epicentrk.ua/ua/shop/klej-dlya-plitki/"
+          - name: "Затирка швів"
+            url: "https://epicentrk.ua/ua/shop/zatirka-dlya-shvov/"
+
+  beauty_assistant:
+    worksheet: "Послуги"
+    sources: []
+
+  furniture_assistant:
+    worksheet: "Матеріали"
+    sources: []
+
+  auto_service_assistant:
+    worksheet: "Роботи"
+    sources: []
+
+  windows_assistant:
+    worksheet: "Вікна"
+    sources: []

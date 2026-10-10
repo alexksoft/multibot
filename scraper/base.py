@@ -57,6 +57,20 @@ class SheetsWriter:
             ws.append_row(_SHEET_HEADER)
             return ws
 
+    def recreate(self, worksheet_name: str, rows: list[ScrapedRow]) -> None:
+        """Clear the worksheet and write all rows fresh."""
+        ws = self._get_ws(worksheet_name)
+        ws.clear()
+        ws.append_row(_SHEET_HEADER)
+        if rows:
+            values = [
+                [r.category, r.item, r.price, r.unit or "",
+                 r.source_name, r.source_url, r.collected_at, "true", ""]
+                for r in rows
+            ]
+            ws.append_rows(values)
+        logger.info(f"[scraper] Recreated '{worksheet_name}' with {len(rows)} rows")
+
     def upsert(self, worksheet_name: str, rows: list[ScrapedRow]) -> None:
         ws = self._get_ws(worksheet_name)
         all_records = ws.get_all_records()

@@ -23,7 +23,9 @@ from src.multibot.config.sections import BotConfig
 from src.multibot.config.settings import settings
 
 BOTS_DIR = Path(settings.bots_dir)
+SCRAPER_CONFIG = Path("scraper/config.yaml")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates.env.filters["enumerate"] = enumerate
 
 app = FastAPI(title="Multibot Admin", docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=settings.admin_session_secret, max_age=3600)
@@ -159,3 +161,124 @@ Rules:
     return templates.TemplateResponse("new_bot.html", {
         "request": request, "error": error, "yaml_result": yaml_text, "instruction": ""
     })
+
+
+# ── Scraper routes ────────────────────────────────────────────────────────────
+
+def _load_scraper_config() -> dict:
+    if SCRAPER_CONFIG.exists():
+        import yaml
+        return yaml.safe_load(SCRAPER_CONFIG.read_text(encoding="utf-8")) or {"bots": {}}
+    return {"bots": {}}
+
+
+def _save_scraper_config(cfg: dict) -> None:
+    import yaml
+    SCRAPER_CONFIG.write_text(yaml.dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+@app.get("/scraper", response_class=HTMLResponse)
+async def scraper_page(request: Request, _=Depends(require_session)):
+    configs = load_configs(settings.bots_dir)
+    scraper_cfg = _load_scraper_config()
+    bots_data = []
+    for cfg in configs:
+        bot_scraper = scraper_cfg.get("bots", {}).get(cfg.name, {"worksheet": "", "sources": []})
+        sheet_id = os.environ.get(cfg.knowledge.sheets.sheet_id_env, "") if cfg.knowledge.sheets.enabled else ""
+        bots_data.append({
+            "name": cfg.name,
+            "role": cfg.assistant_profile.assistant_role,
+            "sheets_enabled": cfg.knowledge.sheets.enabled,
+            "sheet_id": sheet_id,
+            "worksheet": bot_scraper.get("worksheet", ""),
+            "sources": bot_scraper.get("sources", []),
+        })
+    return templates.TemplateResponse("scraper.html", {"request": request, "bots": bots_data, "msg": ""})
+
+
+@app.post("/scraper/check-robots", response_class=HTMLResponse)
+async def check_robots(request: Request, url: str = Form(...), _=Depends(require_session)):
+    from scraper.http_scraper import check_robots_async
+    result = await check_robots_async(url)
+    return templates.TemplateResponse("scraper_robots_result.html", {"request": request, "result": result, "url": url})
+
+
+@app.post("/scraper/add-source")
+async def add_source(
+    request: Request,
+    bot_name: str = Form(...),
+    source_name: str = Form(...),
+    base_url: str = Form(...),
+    _=Depends(require_session),
+):
+    cfg = _load_scraper_config()
+    bot_cfg = cfg.setdefault("bots", {}).setdefault(bot_name, {"worksheet": "", "sources": []})
+    # Avoid duplicates
+    existing = [s["base_url"] for s in bot_cfg.get("sources", [])]
+    if base_url not in existing:
+        bot_cfg.setdefault("sources", []).append({"name": source_name, "base_url": base_url, "categories": []})
+        _save_scraper_config(cfg)
+    return RedirectResponse(f"/scraper#{bot_name}", status_code=302)
+
+
+@app.post("/scraper/add-category")
+async def add_category(
+    request: Request,
+    bot_name: str = Form(...),
+    source_index: int = Form(...),
+    cat_name: str = Form(...),
+    cat_url: str = Form(...),
+    _=Depends(require_session),
+):
+    cfg = _load_scraper_config()
+    sources = cfg.get("bots", {}).get(bot_name, {}).get("sources", [])
+    if 0 <= source_index < len(sources):
+        sources[source_index].setdefault("categories", []).append({"name": cat_name, "url": cat_url})
+        _save_scraper_config(cfg)
+    return RedirectResponse(f"/scraper#{bot_name}", status_code=302)
+
+
+@app.post("/scraper/remove-category")
+async def remove_category(
+    request: Request,
+    bot_name: str = Form(...),
+    source_index: int = Form(...),
+    cat_index: int = Form(...),
+    _=Depends(require_session),
+):
+    cfg = _load_scraper_config()
+    sources = cfg.get("bots", {}).get(bot_name, {}).get("sources", [])
+    if 0 <= source_index < len(sources):
+        cats = sources[source_index].get("categories", [])
+        if 0 <= cat_index < len(cats):
+            cats.pop(cat_index)
+            _save_scraper_config(cfg)
+    return RedirectResponse(f"/scraper#{bot_name}", status_code=302)
+
+
+@app.post("/scraper/run", response_class=HTMLResponse)
+async def run_scraper(
+    request: Request,
+    bot_name: str = Form(...),
+    _=Depends(require_session),
+):
+    from scraper.http_scraper import run_scraper as do_scrape
+    scraper_cfg = _load_scraper_config()
+    bot_cfg = scraper_cfg.get("bots", {}).get(bot_name, {})
+    sources = bot_cfg.get("sources", [])
+    worksheet = bot_cfg.get("worksheet", "Матеріали")
+
+    configs = load_configs(settings.bots_dir)
+    cfg = next((c for c in configs if c.name == bot_name), None)
+    sheet_id = ""
+    if cfg and cfg.knowledge.sheets.enabled:
+        sheet_id = os.environ.get(cfg.knowledge.sheets.sheet_id_env, "")
+
+    result = await do_scrape(
+        bot_name=bot_name,
+        config=sources,
+        creds_path=settings.google_creds_path,
+        sheet_id=sheet_id,
+        worksheet=worksheet,
+    )
+    return templates.TemplateResponse("scraper_result.html", {"request": request, "result": result})

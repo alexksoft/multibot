@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Результат скрейпінгу{% endblock %}
+{% block content %}
+<h2>🕷️ Результат скрейпінгу — {{ result.bot }}</h2>
+
+<div class="card" style="background:{% if not result.errors %}#d4edda{% else %}#fff3cd{% endif %}">
+  <p>📦 Зібрано рядків: <strong>{{ result.rows_collected }}</strong></p>
+  <p>✍️ Записано в Sheets: <strong>{{ result.rows_written }}</strong></p>
+</div>
+
+{% if result.skipped %}
+<div class="card">
+  <h4>⏭️ Пропущено (robots.txt):</h4>
+  <ul>{% for s in result.skipped %}<li>{{ s }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if result.errors %}
+<div class="card" style="background:#f8d7da">
+  <h4>❌ Помилки:</h4>
+  <ul>{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if result.rows_written > 0 %}
+<div class="card" style="background:#d4edda">
+  ✅ Аркуш Google Sheets оновлено. Бот підхопить нові ціни після закінчення кешу (до 5 хв).
+</div>
+{% endif %}
+
+<p><a href="/scraper">← Назад до скрейпера</a></p>
+{% endblock %}
