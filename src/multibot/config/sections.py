@@ -34,6 +34,7 @@ class Step(BaseModel):
     text: str | None = None
     question_type: Literal["number", "text", "choice", "dimension"] | None = None
     options: list[str] | None = None
+    suggestions: list[str] | None = None  # preset quick-pick buttons for number/dimension (free text still allowed)
     unit: str | None = None
     min: float | None = None
     max: float | None = None

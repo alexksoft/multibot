@@ -84,6 +84,16 @@ def _choice_keyboard(options: list[str], prefix: str = "choice") -> list[list[tu
     return rows
 
 
+def _suggestion_keyboard(suggestions: list[str]) -> list[list[tuple[str, str]]]:
+    """Preset quick-pick buttons (2 per row) + 'Enter manually' button."""
+    rows = []
+    for i in range(0, len(suggestions), 2):
+        row = [(s, f"suggestion:{s}") for s in suggestions[i:i+2]]
+        rows.append(row)
+    rows.append([("✏️ Ввести своє значення", "suggestion:__manual__")])
+    return rows
+
+
 class FlowEngine:
     def __init__(
         self,
@@ -192,6 +202,15 @@ class FlowEngine:
         if text_lower.startswith("choice:"):
             text_stripped = text_stripped[7:]
 
+        # Unwrap suggestion callback during active flow
+        if text_lower.startswith("suggestion:"):
+            value = text_stripped[11:]
+            if value == "__manual__":
+                # User wants to type manually — re-ask the question without buttons
+                step_text = step.text or ""
+                return BotResponse(step_text + "\n\n✏️ Введіть значення вручну:")
+            text_stripped = value
+
         return await self._execute_step(user_id, flow, step, state, text_stripped)
 
     async def _start_flow(self, user_id: int, flow: Flow) -> BotResponse:
@@ -251,6 +270,8 @@ class FlowEngine:
                 keyboard = []
                 if step.question_type == "choice" and step.options:
                     keyboard = _choice_keyboard(step.options)
+                elif step.suggestions:
+                    keyboard = _suggestion_keyboard(step.suggestions)
                 return BotResponse(text, keyboard)
 
         elif step.kind == "capability":
