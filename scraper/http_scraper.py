@@ -63,7 +63,141 @@ async def check_robots_async(url: str) -> dict:
     }
 
 
-class EpicentrAdapter:
+class GenericAIAdapter:
+    """
+    Universal adapter: fetches any category page and uses AI to extract
+    product names and prices. Works for any site without site-specific code.
+    """
+
+    def __init__(self, source_name: str, base_url: str,
+                 kiro_url: str = "", kiro_key: str = ""):
+        self.name = source_name
+        self.base_url = base_url
+        self._kiro_url = kiro_url
+        self._kiro_key = kiro_key
+
+    async def fetch(self, category: str, url: str) -> list[ScrapedRow]:
+        today = date.today().strftime("%Y-%m")
+        rows = []
+
+        # Fetch the page
+        try:
+            async with httpx.AsyncClient(
+                timeout=TIMEOUT,
+                headers={"User-Agent": USER_AGENT, "Accept-Language": "uk,en;q=0.9"},
+                follow_redirects=True,
+            ) as client:
+                await asyncio.sleep(CRAWL_DELAY)
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    logger.warning(f"[{self.name}] {url} returned {resp.status_code}")
+                    return []
+                html = resp.text
+        except Exception as e:
+            logger.error(f"[{self.name}] fetch failed {url}: {e}")
+            return []
+
+        # Try JSON-LD first (fast, no AI needed)
+        import json
+        jsonld_rows = self._parse_jsonld(html, category, url, today)
+        if jsonld_rows:
+            logger.info(f"[{self.name}] {category}: {len(jsonld_rows)} items via JSON-LD")
+            return jsonld_rows
+
+        # Fallback: AI extraction
+        if self._kiro_url and self._kiro_key:
+            ai_rows = await self._parse_with_ai(html, category, url, today)
+            if ai_rows:
+                logger.info(f"[{self.name}] {category}: {len(ai_rows)} items via AI")
+                return ai_rows
+
+        logger.warning(f"[{self.name}] {category}: no items extracted from {url}")
+        return []
+
+    def _parse_jsonld(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
+        import json
+        rows = []
+        for match in re.findall(
+            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+            html, re.DOTALL
+        ):
+            try:
+                data = json.loads(match.strip())
+                items = []
+                if isinstance(data, dict) and data.get("@type") == "ItemList":
+                    items = data.get("itemListElement", [])
+                elif isinstance(data, list):
+                    items = data
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    offer = item.get("offers") or item.get("offer") or {}
+                    if isinstance(offer, list):
+                        offer = offer[0] if offer else {}
+                    price = offer.get("price") or item.get("price")
+                    name = item.get("name", "")
+                    item_url = item.get("url", url)
+                    if price and name:
+                        try:
+                            rows.append(ScrapedRow(
+                                category=category, item=name[:100],
+                                price=float(str(price).replace(" ", "").replace(",", ".")),
+                                unit="грн", source_name=self.name,
+                                source_url=item_url, collected_at=today,
+                            ))
+                        except (ValueError, TypeError):
+                            pass
+            except Exception:
+                pass
+        return rows
+
+    async def _parse_with_ai(self, html: str, category: str,
+                              url: str, today: str) -> list[ScrapedRow]:
+        import json
+        # Trim HTML to fit in context — keep first 8000 chars (product listings are near top)
+        html_snippet = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL)
+        html_snippet = re.sub(r'<style[^>]*>.*?</style>', '', html_snippet, flags=re.DOTALL)
+        html_snippet = re.sub(r'<[^>]+>', ' ', html_snippet)
+        html_snippet = re.sub(r'\s+', ' ', html_snippet).strip()[:6000]
+
+        prompt = (
+            f"Extract product listings from this Ukrainian shop page for category '{category}'.\n"
+            f"Page URL: {url}\n"
+            f"Return ONLY a JSON array, no markdown. Each item:\n"
+            f'{{"name": "product name", "price": 123.0, "unit": "грн"}}\n'
+            f"Extract up to 30 items. If no prices found, return [].\n\n"
+            f"Page text:\n{html_snippet}"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"{self._kiro_url}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {self._kiro_key}",
+                             "Content-Type": "application/json"},
+                    json={"model": "claude-haiku-4.5", "max_tokens": 1500,
+                          "messages": [{"role": "user", "content": prompt}]},
+                )
+                resp.raise_for_status()
+                content = resp.json()["choices"][0]["message"]["content"]
+                content = content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                items = json.loads(content)
+                rows = []
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    price = item.get("price")
+                    name = item.get("name", "")
+                    if price and name:
+                        rows.append(ScrapedRow(
+                            category=category, item=str(name)[:100],
+                            price=float(price), unit=item.get("unit", "грн"),
+                            source_name=self.name, source_url=url,
+                            collected_at=date.today().strftime("%Y-%m"),
+                        ))
+                return rows
+        except Exception as e:
+            logger.warning(f"[{self.name}] AI parse failed: {e}")
+            return []
     """Scrapes product listings from epicentrk.ua category pages."""
     name = "Епіцентр"
     base_url = "https://epicentrk.ua"
@@ -166,7 +300,7 @@ class EpicentrAdapter:
 
 
 async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: str,
-                      worksheet: str) -> dict:
+                      worksheet: str, kiro_url: str = "", kiro_key: str = "") -> dict:
     """
     Run scraper for a bot. Returns result summary.
     config = list of {name, base_url, categories: [{name, url}]}
@@ -193,9 +327,14 @@ async def run_scraper(bot_name: str, config: dict, creds_path: str, sheet_id: st
                 skipped.append(msg)
                 continue
 
-            # Scrape
+            # Scrape using universal AI adapter
             try:
-                adapter = EpicentrAdapter()
+                adapter = GenericAIAdapter(
+                    source_name=source_name,
+                    base_url=base_url,
+                    kiro_url=kiro_url or "",
+                    kiro_key=kiro_key or "",
+                )
                 rows = await adapter.fetch(cat_name, cat_url)
                 all_rows.extend(rows)
                 await asyncio.sleep(result["delay"])
