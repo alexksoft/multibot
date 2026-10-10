@@ -203,6 +203,70 @@ async def check_robots(request: Request, url: str = Form(...), _=Depends(require
     return templates.TemplateResponse("scraper_robots_result.html", {"request": request, "result": result, "url": url})
 
 
+@app.post("/scraper/discover", response_class=HTMLResponse)
+async def discover_sources(
+    request: Request,
+    bot_name: str = Form(...),
+    industry: str = Form(...),
+    _=Depends(require_session),
+):
+    """Use AI to find Ukrainian shops for the given industry, check robots.txt, add allowed ones."""
+    from src.multibot.core.providers.kiro_gateway import KiroGatewayProvider
+    from scraper.http_scraper import check_robots_async
+    import json as _json
+
+    provider = KiroGatewayProvider(settings.kiro_gateway_url, settings.kiro_gateway_api_key)
+    prompt = (
+        f"List 10 real Ukrainian online shops or price aggregators for '{industry}' "
+        f"that have product listings with prices. "
+        f"Return ONLY a JSON array, no markdown, no explanation. Format:\n"
+        f'[{{"name": "Shop Name", "base_url": "https://example.ua", '
+        f'"category_url": "https://example.ua/category/"}}]'
+    )
+    result = await provider.complete(
+        system="You are a helpful assistant. Return only valid JSON, no markdown.",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=800,
+    )
+
+    discovered = []
+    errors = []
+    try:
+        text = result.content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        shops = _json.loads(text)
+    except Exception as e:
+        errors.append(f"AI parse error: {e}")
+        shops = []
+
+    cfg = _load_scraper_config()
+    bot_cfg = cfg.setdefault("bots", {}).setdefault(bot_name, {"worksheet": f"{bot_name}_prices", "sources": []})
+    existing_urls = {s["base_url"] for s in bot_cfg.get("sources", [])}
+
+    for shop in shops:
+        base_url = shop.get("base_url", "").rstrip("/")
+        name = shop.get("name", base_url)
+        cat_url = shop.get("category_url", base_url)
+        if not base_url:
+            continue
+        robots = await check_robots_async(cat_url)
+        status = "allowed" if robots["allowed"] else "blocked"
+        discovered.append({"name": name, "base_url": base_url, "cat_url": cat_url,
+                           "allowed": robots["allowed"], "delay": robots["delay"], "status": status})
+        if robots["allowed"] and base_url not in existing_urls:
+            bot_cfg.setdefault("sources", []).append({
+                "name": name,
+                "base_url": base_url,
+                "categories": [{"name": industry, "url": cat_url}]
+            })
+            existing_urls.add(base_url)
+
+    _save_scraper_config(cfg)
+    return templates.TemplateResponse("scraper_discover.html", {
+        "request": request, "bot_name": bot_name, "industry": industry,
+        "discovered": discovered, "errors": errors,
+    })
+
+
 @app.post("/scraper/add-source")
 async def add_source(
     request: Request,
