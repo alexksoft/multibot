@@ -102,7 +102,12 @@ class ShoppingList:
                 item = items[0]
                 price_str = knowledge.format_price(item)
                 url = item.source_url or ""
-                lines.append(f"• {category}: {qty} {unit}\n  {item.item[:60]}\n  {price_str}\n  {url}")
+                name = item.item[:60]
+                if url:
+                    linked = f'<a href="{url}">{name}</a>'
+                else:
+                    linked = name
+                lines.append(f"• {category}: {qty} {unit}\n  {linked} — {price_str}")
                 shopping_results[rule_id] = {
                     "label": category, "qty": qty, "unit": unit,
                     "price_str": price_str,
@@ -217,11 +222,18 @@ class PrepareRequest:
                 price = entry.get("price_str") or "ціна не знайдена"
                 item_name = entry.get("item_name", "")
                 url = entry.get("source_url", "")
-                line = f"  {entry['label']}: {entry.get('qty','')} {entry.get('unit','')} x {price}"
-                if item_name:
-                    line += f"\n    {item_name[:60]}"
-                if url:
-                    line += f"\n    {url}"
+                if item_name and url:
+                    linked = f'<a href="{url}">{item_name[:60]}</a>'
+                elif item_name:
+                    linked = item_name[:60]
+                else:
+                    linked = ""
+                qty_str = f"{entry.get('qty','')} {entry.get('unit','')}".strip()
+                line = f"  {entry['label']}: {qty_str}"
+                if linked:
+                    line += f"\n  {linked} — {price}"
+                else:
+                    line += f" — {price}"
                 lines.append(line)
         lines.append("\n💡 Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.")
         text = "\n".join(lines)
