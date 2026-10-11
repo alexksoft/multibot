@@ -55,11 +55,14 @@ class KnowledgeBase:
         return self._norms
 
     def format_price(self, item: CatalogItem) -> str:
-        parts = []
+        price_str = ""
         if item.price is not None:
-            parts.append(f"{item.price} {item.unit or 'грн'}")
-        if item.source_name:
-            parts.append(item.source_name)
-        if item.collected_at:
-            parts.append(f"станом на {item.collected_at}")
-        return ", ".join(parts) if parts else "ціна невідома"
+            # Format number with spaces as thousands separator
+            price_int = int(item.price)
+            if item.price == price_int:
+                price_str = f"{price_int:,}".replace(",", "\u00a0")  # non-breaking space
+            else:
+                price_str = f"{item.price:,.2f}".replace(",", "\u00a0")
+            price_str += f" {item.unit or 'грн'}"
+        source = f" ({item.source_name})" if item.source_name else ""
+        return price_str + source if price_str else "ціна невідома"

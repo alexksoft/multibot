@@ -46,8 +46,10 @@ class CalculateMaterials:
         results = rules.compute(all_rules, collected, norms)
         if not results:
             return CapabilityResult(False, "Не вдалося розрахувати матеріали. Перевірте введені дані.", error="no results")
-        lines = [f"• {v['label']}: {v['value']} {v['unit']}" for v in results.values()]
-        return CapabilityResult(True, "📐 Розрахунок матеріалів:\n" + "\n".join(lines), data=results)
+        skip = ShoppingList._SKIP_RULES
+        lines = [f"• {v['label']}: {v['value']} {v['unit']}" for k, v in results.items()
+                 if k not in skip and not k.endswith("_area") and not k.endswith("_perimeter")]
+        return CapabilityResult(True, "\ud83d\udcd0 \u0420\u043e\u0437\u0440\u0430\u0445\u0443\u043d\u043e\u043a \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0456\u0432:\n" + "\n".join(lines), data=results)
 
 
 class SearchProducts:
@@ -81,12 +83,17 @@ class SearchProducts:
 class ShoppingList:
     name = "shopping_list"
 
+    # Rule IDs that are intermediate calculations, not purchasable materials
+    _SKIP_RULES = {"wall_area", "floor_area", "ceiling_area", "perimeter"}
+
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
         calc_data = collected.get("_calc_results", {})
         lines = ["📋 Список покупок:"]
         shopping_results = {}
         for rule_id, info in calc_data.items():
+            if rule_id in self._SKIP_RULES or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
+                continue
             category = info.get("label", rule_id)
             items = await knowledge.list_items(category)
             qty = info.get("value", "?")
@@ -94,11 +101,11 @@ class ShoppingList:
             if items:
                 item = items[0]
                 price_str = knowledge.format_price(item)
-                lines.append(f"• {category}: {qty} {unit} — {price_str}")
+                lines.append(f"• {category}: {qty} {unit} — {price_str}")
                 shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": price_str}
             else:
-                lines.append(f"• {category}: {qty} {unit} (ціна не знайдена в каталозі)")
-                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": None}
+                lines.append(f"• {category}: {qty} {unit} (ціна не знайдена в каталозі)")
+                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": "—"}
         if len(lines) == 1:
             return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
         collected["_shopping_results"] = shopping_results
@@ -192,13 +199,17 @@ class PrepareRequest:
             label = _FIELD_LABELS.get(key, key)
             lines.append(f"• {label}: {val}")
         if calc:
-            lines.append("\n📐 Кількість матеріалів:")
-            for info in calc.values():
+            lines.append("\n\U0001f4d0 \u041a\u0456\u043b\u044c\u043a\u0456\u0441\u0442\u044c \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0456\u0432:")
+            skip = ShoppingList._SKIP_RULES
+            for rule_id, info in calc.items():
+                if rule_id in skip or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
+                    continue
                 lines.append(f"  {info['label']}: {info['value']} {info['unit']}")
         if shopping:
             lines.append("\n🛒 Орієнтовні ціни (середні по ринку):")
             for entry in shopping.values():
-                lines.append(f"  {entry['label']}: {entry.get('price_str', 'ціна не знайдена')}")
+                price = entry.get("price_str") or "ціна не знайдена"
+                lines.append(f"  {entry['label']}: {price}")
         lines.append("\n💡 Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.")
         text = "\n".join(lines)
 
@@ -263,8 +274,11 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         if calc:
             story.append(Spacer(1, 0.3*cm))
             story.append(Paragraph("Кількість матеріалів", h2_style))
-            table_data = [["Матеріал", "Кількість", "Одиниця"]]
-            for info in calc.values():
+            table_data = [["\u041c\u0430\u0442\u0435\u0440\u0456\u0430\u043b", "\u041a\u0456\u043b\u044c\u043a\u0456\u0441\u0442\u044c", "\u041e\u0434\u0438\u043d\u0438\u0446\u044f"]]
+            skip = ShoppingList._SKIP_RULES
+            for rule_id, info in calc.items():
+                if rule_id in skip or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
+                    continue
                 table_data.append([info["label"], str(info["value"]), info["unit"]])
             t = Table(table_data, colWidths=[9*cm, 4*cm, 3*cm])
             t.setStyle(TableStyle([
@@ -284,7 +298,7 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
             story.append(Paragraph("Орієнтовні ціни (середні по ринку)", h2_style))
             table_data = [["Матеріал", "Ціна"]]
             for entry in shopping.values():
-                table_data.append([entry["label"], entry.get("price_str", "—")])
+                table_data.append([entry["label"], entry.get("price_str") or "—"])
             t = Table(table_data, colWidths=[10*cm, 6*cm])
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f4f8")),
