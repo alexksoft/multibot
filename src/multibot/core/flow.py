@@ -1,4 +1,5 @@
 from __future__ import annotations
+import ast
 import logging
 import re
 from dataclasses import dataclass, field
@@ -64,8 +65,16 @@ def _eval_transition(when: str, collected: dict) -> bool:
             try:
                 variables[k] = float(v)
             except (TypeError, ValueError):
-                pass
-        return bool(safe_eval(when, variables))
+                variables[k] = v  # keep strings too
+        # Support string equality: work == 'плитка'
+        import re as _re
+        # Replace 'string' or "string" literals for safe eval
+        env = dict(variables)
+        env["__builtins__"] = {}
+        # Allow simple comparisons with string literals
+        result = eval(compile(ast.parse(when, mode="eval"), "<transition>", "eval"),
+                      {"__builtins__": {}}, env)
+        return bool(result)
     except Exception:
         return False
 
@@ -264,6 +273,9 @@ class FlowEngine:
                     return resp
                 if step.save_as:
                     state.collected[step.save_as] = user_input
+                # Set default height for floor-only works that skip ask_height
+                if step.save_as == "room" and "height" not in state.collected:
+                    state.collected["height"] = "2.7"
                 next_id = self._resolve_next(step, state.collected)
                 if next_id:
                     next_step = self._get_step(flow, next_id)

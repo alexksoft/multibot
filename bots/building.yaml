@@ -47,6 +47,10 @@ conversation_flows:
             - "3x6"
             - "6x4"
           save_as: room
+          transitions:
+            - { when: "work == 'плитка'",           goto: do_calc }
+            - { when: "work == 'стяжка підлоги'",  goto: do_calc }
+            - { when: "work == 'ламінат'",          goto: do_calc }
           next: ask_height
         - id: ask_height
           kind: question
