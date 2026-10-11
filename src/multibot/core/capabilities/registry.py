@@ -95,11 +95,10 @@ class ShoppingList:
             if rule_id in self._SKIP_RULES or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
                 continue
             category = info.get("label", rule_id)
-            items = await knowledge.list_items(category)
             qty = info.get("value", "?")
             unit = info.get("unit", "")
-            if items:
-                item = items[0]
+            item = await knowledge.cheapest_item(category)
+            if item:
                 price_str = knowledge.format_price(item)
                 url = item.source_url or ""
                 name = item.item[:60]

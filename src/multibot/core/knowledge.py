@@ -35,6 +35,14 @@ class KnowledgeBase:
         cat_lower = category.lower()
         return [i for i in all_items if i.category.lower() == cat_lower]
 
+    async def cheapest_item(self, category: str) -> CatalogItem | None:
+        """Return the cheapest item in a category (lowest price per unit)."""
+        items = await self.list_items(category)
+        with_price = [i for i in items if i.price is not None and i.price > 0]
+        if not with_price:
+            return items[0] if items else None
+        return min(with_price, key=lambda i: i.price)
+
     async def find_item(self, category: str, item_name: str) -> CatalogItem | None:
         items = await self.list_items(category)
         name_lower = item_name.lower()
