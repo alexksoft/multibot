@@ -211,6 +211,14 @@ class FlowEngine:
                 return BotResponse(step_text + "\n\n✏️ Введіть значення вручну:")
             text_stripped = value
 
+        # flow: callback during active flow — restart that flow
+        if text_lower.startswith("flow:"):
+            flow_id = text_stripped[5:]
+            new_flow = self._flows.get(flow_id)
+            if new_flow:
+                await self._storage.clear_state(self._bot_name, user_id)
+                return await self._start_flow(user_id, new_flow)
+
         return await self._execute_step(user_id, flow, step, state, text_stripped)
 
     async def _start_flow(self, user_id: int, flow: Flow) -> BotResponse:

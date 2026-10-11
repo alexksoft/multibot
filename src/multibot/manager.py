@@ -35,7 +35,6 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
     """Send BotResponse — text + optional keyboard + optional document."""
     markup = _make_reply_markup(response.keyboard)
     if is_callback:
-        chat = message_or_query.message.chat
         send_text = message_or_query.message.reply_text
         send_doc = message_or_query.message.reply_document
     else:
@@ -154,10 +153,14 @@ class BotManager:
             )
             try:
                 response = await ctx.flow_engine.handle(user_id, data)
+                await _send_response(query, response, is_callback=True)
             except Exception as e:
-                logger.error(f"[{ctx.config.name}] Button error: {e}", exc_info=True)
-                response = BotResponse("Виникла помилка. Спробуйте ще раз.")
-            await _send_response(query, response, is_callback=True)
+                logger.error(f"[{ctx.config.name}] Button error for data={repr(data)}: {e}", exc_info=True)
+                try:
+                    await query.message.reply_text("Виникла помилка. Спробуйте ще раз.")
+                except Exception:
+                    pass
+                return
             log_message(
                 ctx.config.name, user_id, "out", response.text,
                 enabled=self._settings.dialog_log_enabled,
