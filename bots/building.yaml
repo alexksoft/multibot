@@ -29,7 +29,7 @@ conversation_flows:
           kind: question
           text: "Який вид робіт?"
           question_type: choice
-          options: ["Штукатурка", "Шпаклівка", "Фарбування", "Плитка", "Стяжка підлоги", "Ламінат"]
+          options: ["Штукатурка", "Шпаклівка", "Фарбування", "Плитка", "Стяжка підлоги", "Ламінат", "Поклейка шпалер"]
           save_as: work
           next: ask_room
         - id: ask_room
@@ -111,10 +111,13 @@ knowledge:
     - { id: paint_l,      label: "Фарба",           expression: "wall_area * norms_paint",                 unit: "л",  round_to: 1 }
     - { id: tile_m2,      label: "Плитка",           expression: "floor_area * norms_tile_waste",           unit: "м²", round_to: 1 }
     - { id: tile_glue_kg, label: "Клей",             expression: "floor_area * norms_tile_glue",            unit: "кг", round_to: 0 }
+    - { id: grout_kg,     label: "Затирка",          expression: "floor_area * norms_grout",               unit: "кг", round_to: 1 }
     - { id: screed_kg,    label: "Цементна стяжка", expression: "floor_area * norms_screed",   unit: "кг", round_to: 0 }
     - { id: screed_fiber, label: "Фібра",            expression: "floor_area * norms_fiber",    unit: "кг", round_to: 1 }
     - { id: lam_m2,       label: "Ламінат",          expression: "floor_area * norms_lam_waste", unit: "м²", round_to: 1 }
     - { id: lam_sub_m2,   label: "Підкладка",        expression: "floor_area * norms_lam_waste", unit: "м²", round_to: 1 }
+    - { id: wallpaper_rl,  label: "Шпалери",         expression: "wall_area / norms_wallpaper_roll", unit: "рул", round_to: 0 }
+    - { id: wallpaper_glue, label: "Клей для шпалер", expression: "wall_area / norms_wallpaper_glue", unit: "пач", round_to: 0 }
   norms:
     norms_plaster: 8.5
     norms_primer: 0.15
@@ -126,6 +129,8 @@ knowledge:
     norms_screed: 20.0
     norms_fiber: 0.6
     norms_lam_waste: 1.1
+    norms_wallpaper_roll: 5.0
+    norms_wallpaper_glue: 25.0
   work_rules:
     штукатурка: [wall_area, plaster_kg, primer_l]
     шпаклівка: [wall_area, putty_kg, primer_l]
@@ -133,6 +138,7 @@ knowledge:
     плитка: [floor_area, tile_m2, tile_glue_kg, grout_kg]
     стяжка підлоги: [floor_area, screed_kg, screed_fiber]
     ламінат: [floor_area, lam_m2, lam_sub_m2]
+    поклейка шпалер: [wall_area, wallpaper_rl, wallpaper_glue]
   faq:
     - question: "Скільки сохне штукатурка?"
       answer: "Залежно від шару та вологості — зазвичай від 1 до 2 діб."
