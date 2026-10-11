@@ -388,8 +388,9 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
                     ("SPAN", (0, 0), (1, 0)),
                 ]))
-                story.append(t2)
             story.append(t)
+            if total_str:
+                story.append(t2)
 
         story.append(Spacer(1, 0.5*cm))
         story.append(Paragraph(
