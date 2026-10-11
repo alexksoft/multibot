@@ -322,20 +322,26 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         if shopping:
             story.append(Spacer(1, 0.3*cm))
             story.append(Paragraph("Ціни з Епіцентру", h2_style))
-            table_data = [["Матеріал", "К-сть", "Ціна", "Товар"]]
+            link_style = ParagraphStyle("link", fontName=font_name, fontSize=9,
+                                          textColor=colors.HexColor("#0645AD"), leading=12)
+            table_data = [["Матеріал / Товар", "К-сть", "Ціна"]]
             for entry in shopping.values():
-                item_name = entry.get("item_name", "")[:40]
+                item_name = entry.get("item_name", "")
                 url = entry.get("source_url", "")
-                cell = item_name
-                if url:
-                    cell = f'<link href="{url}">{item_name}</link>' if item_name else url[:40]
-                table_data.append([
-                    entry["label"],
-                    f"{entry.get('qty','')} {entry.get('unit','')}",
-                    entry.get("price_str") or "—",
-                    Paragraph(cell, ParagraphStyle("link", fontName=font_name, fontSize=8, textColor=colors.blue)),
-                ])
-            t = Table(table_data, colWidths=[10*cm, 6*cm])
+                qty_str = f"{entry.get('qty','')} {entry.get('unit','')}".strip()
+                # Category label bold + item name as link below
+                if item_name and url:
+                    cell = Paragraph(
+                        f"<b>{entry['label']}</b><br/>"
+                        f'<link href="{url}" color="#0645AD">{item_name[:55]}</link>',
+                        link_style
+                    )
+                elif item_name:
+                    cell = Paragraph(f"<b>{entry['label']}</b><br/>{item_name[:55]}", link_style)
+                else:
+                    cell = Paragraph(f"<b>{entry['label']}</b>", link_style)
+                table_data.append([cell, qty_str, entry.get("price_str") or "—"])
+            t = Table(table_data, colWidths=[10*cm, 3*cm, 4*cm])
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f4f8")),
                 ("FONTNAME", (0, 0), (-1, -1), font_name),
