@@ -239,7 +239,8 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
 
         # Try to register a Unicode font for Cyrillic; fall back to built-in
         font_name = "Helvetica"
-        for path in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        for path in ["/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                      "/usr/share/fonts/dejavu/DejaVuSans.ttf",
                      "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"]:
             if os.path.exists(path):
