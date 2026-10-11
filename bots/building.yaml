@@ -106,13 +106,13 @@ knowledge:
   calculation_rules:
     - { id: wall_area,    label: "Площа стін",      expression: "(room_width + room_length) * 2 * height", unit: "м²", round_to: 1 }
     - { id: floor_area,   label: "Площа підлоги",   expression: "room_width * room_length",                unit: "м²", round_to: 1 }
-    - { id: plaster_kg,   label: "Штукатурка",      expression: "wall_area * norms_plaster",               unit: "кг", round_to: 0 }
-    - { id: primer_l,     label: "Ґрунтовка",       expression: "wall_area * norms_primer",                unit: "л",  round_to: 1 }
-    - { id: putty_kg,     label: "Шпаклівка",       expression: "wall_area * norms_putty",                 unit: "кг", round_to: 0 }
-    - { id: paint_l,      label: "Фарба",            expression: "wall_area * norms_paint",                 unit: "л",  round_to: 1 }
+    - { id: plaster_kg,   label: "Штукатурка",    expression: "wall_area * norms_plaster",               unit: "кг", round_to: 0 }
+    - { id: primer_l,     label: "Ґрунтовка",      expression: "wall_area * norms_primer",                unit: "л",  round_to: 1 }
+    - { id: putty_kg,     label: "Шпаклівка",      expression: "wall_area * norms_putty",                 unit: "кг", round_to: 0 }
+    - { id: paint_l,      label: "Фарба",           expression: "wall_area * norms_paint",                 unit: "л",  round_to: 1 }
     - { id: tile_m2,      label: "Плитка",           expression: "floor_area * norms_tile_waste",           unit: "м²", round_to: 1 }
-    - { id: tile_glue_kg, label: "Клей для плитки",  expression: "floor_area * norms_tile_glue",            unit: "кг", round_to: 0 }
-    - { id: grout_kg,     label: "Затирка швів",     expression: "floor_area * norms_grout",                unit: "кг", round_to: 1 }
+    - { id: tile_glue_kg, label: "Клей",             expression: "floor_area * norms_tile_glue",            unit: "кг", round_to: 0 }
+    - { id: grout_kg,     label: "Затирка",          expression: "floor_area * norms_grout",                unit: "кг", round_to: 1 }
   norms:
     norms_plaster: 8.5
     norms_primer: 0.15
