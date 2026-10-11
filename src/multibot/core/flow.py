@@ -287,9 +287,11 @@ class FlowEngine:
                     await self._storage.save_state(state)
                     next_resp = await self._execute_step(user_id, flow, next_step, state, "")
                     combined = (result.text + "\n\n" + next_resp.text).strip() if next_resp.text else result.text
-                    return BotResponse(combined, next_resp.keyboard, next_resp.document, next_resp.document_name)
+                    # Keep document from whichever step produced it
+                    doc = next_resp.document or result.document
+                    doc_name = next_resp.document_name if next_resp.document else result.document_name
+                    return BotResponse(combined, next_resp.keyboard, doc, doc_name)
             await self._storage.clear_state(self._bot_name, user_id)
-            # prepare_request returns document
             if result.document:
                 return BotResponse(result.text, keyboard=_menu_keyboard(self._flows),
                                    document=result.document, document_name=result.document_name)
