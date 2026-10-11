@@ -146,6 +146,7 @@ class BotManager:
             await query.answer()
             user_id = query.from_user.id
             data = query.data or ""
+            logger.info(f"[{ctx.config.name}] button callback: user={user_id} data={repr(data)}")
             log_message(
                 ctx.config.name, user_id, "in", data,
                 enabled=self._settings.dialog_log_enabled,
