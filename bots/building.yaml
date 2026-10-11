@@ -53,8 +53,7 @@ conversation_flows:
           text: "Висота стін (м)?"
           question_type: number
           unit: "м"
-          min: 2
-          max: 5
+          min: 1.8
           suggestions:
             - "2.5"
             - "2.7"
