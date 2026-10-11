@@ -89,7 +89,7 @@ class ShoppingList:
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
         calc_data = collected.get("_calc_results", {})
-        lines = ["📋 Список покупок:"]
+        lines = ["Список покупок:"]
         shopping_results = {}
         for rule_id, info in calc_data.items():
             if rule_id in self._SKIP_RULES or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
@@ -101,11 +101,17 @@ class ShoppingList:
             if items:
                 item = items[0]
                 price_str = knowledge.format_price(item)
-                lines.append(f"• {category}: {qty} {unit} — {price_str}")
-                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": price_str}
+                url = item.source_url or ""
+                lines.append(f"• {category}: {qty} {unit}\n  {item.item[:60]}\n  {price_str}\n  {url}")
+                shopping_results[rule_id] = {
+                    "label": category, "qty": qty, "unit": unit,
+                    "price_str": price_str,
+                    "item_name": item.item,
+                    "source_url": url,
+                }
             else:
                 lines.append(f"• {category}: {qty} {unit} (ціна не знайдена в каталозі)")
-                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": "—"}
+                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": "—", "item_name": "", "source_url": ""}
         if len(lines) == 1:
             return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
         collected["_shopping_results"] = shopping_results
@@ -206,10 +212,17 @@ class PrepareRequest:
                     continue
                 lines.append(f"  {info['label']}: {info['value']} {info['unit']}")
         if shopping:
-            lines.append("\n🛒 Орієнтовні ціни (середні по ринку):")
+            lines.append("\nЦіни з Епіцентру:")
             for entry in shopping.values():
                 price = entry.get("price_str") or "ціна не знайдена"
-                lines.append(f"  {entry['label']}: {price}")
+                item_name = entry.get("item_name", "")
+                url = entry.get("source_url", "")
+                line = f"  {entry['label']}: {entry.get('qty','')} {entry.get('unit','')} x {price}"
+                if item_name:
+                    line += f"\n    {item_name[:60]}"
+                if url:
+                    line += f"\n    {url}"
+                lines.append(line)
         lines.append("\n💡 Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.")
         text = "\n".join(lines)
 
@@ -296,10 +309,20 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         # Prices section
         if shopping:
             story.append(Spacer(1, 0.3*cm))
-            story.append(Paragraph("Орієнтовні ціни (середні по ринку)", h2_style))
-            table_data = [["Матеріал", "Ціна"]]
+            story.append(Paragraph("Ціни з Епіцентру", h2_style))
+            table_data = [["Матеріал", "К-сть", "Ціна", "Товар"]]
             for entry in shopping.values():
-                table_data.append([entry["label"], entry.get("price_str") or "—"])
+                item_name = entry.get("item_name", "")[:40]
+                url = entry.get("source_url", "")
+                cell = item_name
+                if url:
+                    cell = f'<link href="{url}">{item_name}</link>' if item_name else url[:40]
+                table_data.append([
+                    entry["label"],
+                    f"{entry.get('qty','')} {entry.get('unit','')}",
+                    entry.get("price_str") or "—",
+                    Paragraph(cell, ParagraphStyle("link", fontName=font_name, fontSize=8, textColor=colors.blue)),
+                ])
             t = Table(table_data, colWidths=[10*cm, 6*cm])
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f4f8")),
