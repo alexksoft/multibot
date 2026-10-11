@@ -119,6 +119,17 @@ class ShoppingList:
                 shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": "—", "item_name": "", "source_url": ""}
         if len(lines) == 1:
             return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
+        # Calculate total
+        total = sum(
+            float(str(e["price_str"]).split()[0].replace(" ", "").replace(",", "."))
+            for e in shopping_results.values()
+            if e.get("price_str") and e["price_str"] != "—"
+            and str(e["price_str"]).split()[0].replace(" ", "").replace(",", ".").replace(".", "", 1).isdigit()
+        )
+        if total > 0:
+            total_str = f"{int(total):,}".replace(",", " ")
+            lines.append(f"\nРазом орієнтовно: {total_str} грн")
+            shopping_results["_total"] = total_str
         collected["_shopping_results"] = shopping_results
         return CapabilityResult(True, "\n".join(lines), data=shopping_results)
 
@@ -235,6 +246,9 @@ class PrepareRequest:
                 else:
                     line += f" — {price}"
                 lines.append(line)
+        total_str = shopping.get("_total", "")
+        if total_str:
+            lines.append(f"\nРазом орієнтовно: {total_str} грн")
         lines.append("\n💡 Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.")
         text = "\n".join(lines)
 
@@ -351,6 +365,22 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ]))
+            # Total row
+            total_str = shopping.get("_total", "")
+            if total_str:
+                t2 = Table(
+                    [[Paragraph("<b>Разом орієнтовно:</b>", link_style), "", f"{total_str} грн"]],
+                    colWidths=[10*cm, 3*cm, 4*cm]
+                )
+                t2.setStyle(TableStyle([
+                    ("FONTNAME", (0, 0), (-1, -1), font_name),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#e8f4f8")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("SPAN", (0, 0), (1, 0)),
+                ]))
+                story.append(t2)
             story.append(t)
 
         story.append(Spacer(1, 0.5*cm))
