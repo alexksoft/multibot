@@ -101,10 +101,10 @@ class ShoppingList:
             if items:
                 item = items[0]
                 price_str = knowledge.format_price(item)
-                lines.append(f"• {category}: {qty} {unit} — {price_str}")
+                lines.append(f"• {category}: {qty} {unit} — {price_str}")
                 shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": price_str}
             else:
-                lines.append(f"• {category}: {qty} {unit} (ціна не знайдена в каталозі)")
+                lines.append(f"• {category}: {qty} {unit} (ціна не знайдена в каталозі)")
                 shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": "—"}
         if len(lines) == 1:
             return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")

@@ -57,12 +57,17 @@ class KnowledgeBase:
     def format_price(self, item: CatalogItem) -> str:
         price_str = ""
         if item.price is not None:
-            # Format number with spaces as thousands separator
             price_int = int(item.price)
             if item.price == price_int:
-                price_str = f"{price_int:,}".replace(",", "\u00a0")  # non-breaking space
+                price_str = f"{price_int:,}".replace(",", " ")
             else:
-                price_str = f"{item.price:,.2f}".replace(",", "\u00a0")
+                price_str = f"{item.price:,.2f}".replace(",", " ")
             price_str += f" {item.unit or 'грн'}"
         source = f" ({item.source_name})" if item.source_name else ""
         return price_str + source if price_str else "ціна невідома"
+
+    def _fmt_num(self, price: float) -> str:
+        price_int = int(price)
+        if price == price_int:
+            return f"{price_int:,}".replace(",", " ")
+        return f"{price:,.2f}".replace(",", " ")

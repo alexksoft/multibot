@@ -31,6 +31,11 @@ def _make_reply_markup(keyboard: list[list[tuple[str, str]]]) -> InlineKeyboardM
     ])
 
 
+def _safe_text(text: str) -> str:
+    """Remove surrogate characters that cause UnicodeEncodeError on Python 3.9."""
+    return text.encode("utf-16", "surrogatepass").decode("utf-16").encode("utf-8", "ignore").decode("utf-8")
+
+
 async def _send_response(message_or_query, response: BotResponse, is_callback: bool = False):
     """Send BotResponse — text + optional keyboard + optional document."""
     markup = _make_reply_markup(response.keyboard)
@@ -41,7 +46,7 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
         send_text = message_or_query.reply_text
         send_doc = message_or_query.reply_document
 
-    await send_text(response.text, reply_markup=markup)
+    await send_text(_safe_text(response.text), reply_markup=markup)
     if response.document:
         import io
         from telegram import InputFile
