@@ -44,9 +44,9 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
     await send_text(response.text, reply_markup=markup)
     if response.document:
         import io
+        from telegram import InputFile
         await send_doc(
-            document=io.BytesIO(response.document),
-            filename=response.document_name,
+            document=InputFile(io.BytesIO(response.document), filename=response.document_name),
             caption="📄 Ваш розрахунок у PDF",
         )
 
@@ -155,7 +155,15 @@ class BotManager:
                 response = await ctx.flow_engine.handle(user_id, data)
                 await _send_response(query, response, is_callback=True)
             except Exception as e:
-                logger.error(f"[{ctx.config.name}] Button error for data={repr(data)}: {e}", exc_info=True)
+                import traceback
+                err_msg = f"Button error data={repr(data)}: {e}\n{traceback.format_exc()}"
+                logger.error(f"[{ctx.config.name}] {err_msg}")
+                # Also write to file since journald is flooded
+                try:
+                    with open("/tmp/bot_errors.log", "a") as f:
+                        f.write(err_msg + "\n---\n")
+                except Exception:
+                    pass
                 try:
                     await query.message.reply_text("Виникла помилка. Спробуйте ще раз.")
                 except Exception:
