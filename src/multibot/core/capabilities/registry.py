@@ -120,12 +120,16 @@ class ShoppingList:
         if len(lines) == 1:
             return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
         # Calculate total
-        total = sum(
-            float(str(e["price_str"]).split()[0].replace(" ", "").replace(",", "."))
-            for e in shopping_results.values()
-            if e.get("price_str") and e["price_str"] != "—"
-            and str(e["price_str"]).split()[0].replace(" ", "").replace(",", ".").replace(".", "", 1).isdigit()
-        )
+        import re as _re
+        total = 0.0
+        for e in shopping_results.values():
+            ps = e.get("price_str", "") or ""
+            m = _re.match(r"([\d\s]+)", ps.replace("\xa0", " ").replace("\u00a0", " "))
+            if m:
+                try:
+                    total += float(m.group(1).replace(" ", ""))
+                except ValueError:
+                    pass
         if total > 0:
             total_str = f"{int(total):,}".replace(",", " ")
             lines.append(f"\nРазом орієнтовно: {total_str} грн")
@@ -229,7 +233,9 @@ class PrepareRequest:
                 lines.append(f"  {info['label']}: {info['value']} {info['unit']}")
         if shopping:
             lines.append("\nЦіни з Епіцентру:")
-            for entry in shopping.values():
+            for key, entry in shopping.items():
+                if key == "_total" or not isinstance(entry, dict):
+                    continue
                 price = entry.get("price_str") or "ціна не знайдена"
                 item_name = entry.get("item_name", "")
                 url = entry.get("source_url", "")
@@ -339,7 +345,9 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
             link_style = ParagraphStyle("link", fontName=font_name, fontSize=9,
                                           textColor=colors.HexColor("#0645AD"), leading=12)
             table_data = [["Матеріал / Товар", "К-сть", "Ціна"]]
-            for entry in shopping.values():
+            for key, entry in shopping.items():
+                if key == "_total" or not isinstance(entry, dict):
+                    continue
                 item_name = entry.get("item_name", "")
                 url = entry.get("source_url", "")
                 qty_str = f"{entry.get('qty','')} {entry.get('unit','')}".strip()
