@@ -126,7 +126,12 @@ class ShoppingList:
             m = _re.match(r"([\d\s]+)", ps.replace("\xa0", " ").replace("\u00a0", " "))
             if m:
                 try:
-                    total += float(m.group(1).replace(" ", ""))
+                    unit_price = float(m.group(1).replace(" ", ""))
+                    try:
+                        qty = float(str(e.get("qty", 1)).replace(",", "."))
+                    except (ValueError, TypeError):
+                        qty = 1.0
+                    total += unit_price * qty
                 except ValueError:
                     pass
         if total > 0:
