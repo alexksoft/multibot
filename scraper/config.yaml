@@ -1,41 +1,47 @@
-# Scraper configuration — sources per bot
-# Each source has: url, name, categories to scrape
-# Run via admin panel /scraper or CLI: python -m scraper run --bot building_assistant
-
 bots:
   building_assistant:
-    worksheet: "building_assistant_prices"
+    worksheet: building_assistant_prices
     sources:
-      - name: "Епіцентр"
-        base_url: "https://epicentrk.ua"
-        categories:
-          - name: "Плитка"
-            url: "https://epicentrk.ua/ua/shop/plitka-keramicheskaya/"
-          - name: "Фарба"
-            url: "https://epicentrk.ua/ua/shop/kraska/"
-          - name: "Штукатурка"
-            url: "https://epicentrk.ua/ua/shop/shtukaturka/"
-          - name: "Шпаклівка"
-            url: "https://epicentrk.ua/ua/shop/shpaklevka/"
-          - name: "Ґрунтовка"
-            url: "https://epicentrk.ua/ua/shop/grunt/"
-          - name: "Клей для плитки"
-            url: "https://epicentrk.ua/ua/shop/klej-dlya-plitki/"
-          - name: "Затирка швів"
-            url: "https://epicentrk.ua/ua/shop/zatirka-dlya-shvov/"
-
+    - name: Епіцентр
+      base_url: https://epicentrk.ua
+      categories:
+      - name: Плитка
+        url: https://epicentrk.ua/ua/shop/plitka/
+      - name: Штукатурка
+        url: https://epicentrk.ua/ua/shop/shtukaturka/
+    - name: Budpostach
+      base_url: https://budpostach.ua
+      categories:
+      - name: Плитка
+        url: https://budpostach.ua/ua/plitka/
+      - name: Фарба
+        url: https://budpostach.ua/ua/farby/
+      - name: Штукатурка
+        url: https://budpostach.ua/ua/shtukaturka/
+      - name: Клей
+        url: https://budpostach.ua/ua/klej/
+      - name: Ґрунтовка
+        url: https://budpostach.ua/ua/grunty/
+    - name: F.ua
+      base_url: https://f.ua
+      categories:
+      - name: Плитка
+        url: https://f.ua/shop/plitka/
+      - name: Фарба
+        url: https://f.ua/shop/farby/
+      - name: Штукатурка
+        url: https://f.ua/shop/shtukaturka/
+      - name: Клей для плитки
+        url: https://f.ua/shop/klej-dlya-plitki/
   beauty_assistant:
-    worksheet: "beauty_assistant_prices"
+    worksheet: beauty_assistant_prices
     sources: []
-
   furniture_assistant:
-    worksheet: "furniture_assistant_prices"
+    worksheet: furniture_assistant_prices
     sources: []
-
   auto_service_assistant:
-    worksheet: "auto_service_assistant_prices"
+    worksheet: auto_service_assistant_prices
     sources: []
-
   windows_assistant:
-    worksheet: "windows_assistant_prices"
+    worksheet: windows_assistant_prices
     sources: []
