@@ -3,8 +3,14 @@ import logging
 import os
 from functools import partial
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    ReplyKeyboardMarkup, KeyboardButton, BotCommand, InputFile,
+)
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    CallbackQueryHandler, filters, ContextTypes,
+)
 
 from .config.sections import BotConfig
 from .context import BotContext
@@ -21,6 +27,13 @@ from .core.storage import Storage
 
 logger = logging.getLogger(__name__)
 
+RESTART_BUTTON = "\U0001f504 Почати спочатку"
+_REPLY_KEYBOARD = ReplyKeyboardMarkup(
+    [[KeyboardButton(RESTART_BUTTON)]],
+    resize_keyboard=True,
+    input_field_placeholder="Напишіть або оберіть дію...",
+)
+
 
 def _make_reply_markup(keyboard: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup | None:
     if not keyboard:
@@ -32,12 +45,10 @@ def _make_reply_markup(keyboard: list[list[tuple[str, str]]]) -> InlineKeyboardM
 
 
 def _safe_text(text: str) -> str:
-    """Remove surrogate characters that cause UnicodeEncodeError on Python 3.9."""
     return text.encode("utf-16", "surrogatepass").decode("utf-16").encode("utf-8", "ignore").decode("utf-8")
 
 
 async def _send_response(message_or_query, response: BotResponse, is_callback: bool = False):
-    """Send BotResponse — text + optional keyboard + optional document."""
     markup = _make_reply_markup(response.keyboard)
     if is_callback:
         send_text = message_or_query.message.reply_text
@@ -49,7 +60,6 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
     await send_text(_safe_text(response.text), reply_markup=markup, parse_mode="HTML")
     if response.document:
         import io
-        from telegram import InputFile
         await send_doc(
             document=InputFile(io.BytesIO(response.document), filename=response.document_name),
             caption="📄 Ваш розрахунок у PDF",
@@ -101,19 +111,28 @@ class BotManager:
         self._apps: list[Application] = []
 
     def _make_handlers(self, ctx: BotContext):
-        async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        async def _do_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await ctx.storage.clear_state(ctx.config.name, update.effective_user.id)
             profile = ctx.config.assistant_profile
-            resp = BotResponse(
-                text=f"👋 {profile.assistant_role}\n\nℹ️ {profile.disclaimer}",
-                keyboard=ctx.flow_engine._menu_response().keyboard,
+            text = _safe_text(f"👋 {profile.assistant_role}\n\nℹ️ {profile.disclaimer}")
+            # Persistent restart keyboard
+            await update.message.reply_text(text, reply_markup=_REPLY_KEYBOARD, parse_mode="HTML")
+            # Inline menu
+            menu = ctx.flow_engine._menu_response()
+            await update.message.reply_text(
+                menu.text,
+                reply_markup=_make_reply_markup(menu.keyboard),
             )
-            await _send_response(update.message, resp)
             log_message(
-                ctx.config.name, update.effective_user.id, "out", resp.text,
+                ctx.config.name, update.effective_user.id, "out", text,
                 enabled=self._settings.dialog_log_enabled,
                 sheet_id=self._settings.dialog_log_sheet,
                 creds_path=self._settings.google_creds_path,
             )
+
+        async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await _do_start(update, context)
 
         async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             admin_id = self._settings.admin_chat_id
@@ -126,6 +145,10 @@ class BotManager:
         async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id = update.effective_user.id
             text = update.message.text or ""
+            # Persistent restart button
+            if text == RESTART_BUTTON:
+                await _do_start(update, context)
+                return
             log_message(
                 ctx.config.name, user_id, "in", text,
                 enabled=self._settings.dialog_log_enabled,
@@ -163,7 +186,6 @@ class BotManager:
                 import traceback
                 err_msg = f"Button error data={repr(data)}: {e}\n{traceback.format_exc()}"
                 logger.error(f"[{ctx.config.name}] {err_msg}")
-                # Also write to file since journald is flooded
                 try:
                     with open("/tmp/bot_errors.log", "a") as f:
                         f.write(err_msg + "\n---\n")
@@ -212,7 +234,6 @@ class BotManager:
             logger.info(f"[manager] Bot '{cfg.name}' ready")
 
     async def run_all(self) -> None:
-        """Run all bots concurrently using polling."""
         import asyncio
         if not self._apps:
             logger.error("[manager] No bots to run")
@@ -220,13 +241,18 @@ class BotManager:
 
         async def run_one(app: Application):
             await app.initialize()
+            try:
+                await app.bot.set_my_commands([
+                    BotCommand("start", "\U0001f504 Почати спочатку"),
+                ])
+            except Exception as e:
+                logger.warning(f"set_my_commands failed: {e}")
             await app.start()
             await app.updater.start_polling(drop_pending_updates=True)
             logger.info(f"[manager] Bot started: {app.bot.username if app.bot else '?'}")
 
         await asyncio.gather(*[run_one(app) for app in self._apps])
 
-        # Keep running until interrupted
         import signal
         stop_event = asyncio.Event()
 
@@ -237,7 +263,7 @@ class BotManager:
             try:
                 asyncio.get_event_loop().add_signal_handler(sig, _stop)
             except NotImplementedError:
-                pass  # Windows
+                pass
 
         await stop_event.wait()
         await self.shutdown()
