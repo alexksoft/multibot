@@ -40,7 +40,69 @@ def _parse_package(name: str) -> tuple[float | None, str | None]:
             return size, unit
         except ValueError:
             pass
-    return None, None  # max pages to paginate per category
+    return None, None
+
+
+_CHAR_RE = re.compile(
+    r'<dt[^>]*>\s*<span>([^<]+)</span>\s*</dt>\s*<dd[^>]*>\s*<span>([^<]+)</span>',
+    re.DOTALL
+)
+_NUM_RE = re.compile(r'([\d]+(?:[.,]\d+)?)')
+
+
+async def _fetch_product_chars(url: str, client) -> tuple:
+    """
+    Fetch product page, extract package_size + package_unit from characteristics.
+    Priority: кількість в упаковці кв.м (tile) > вага (kg) > об'єм (l)
+    """
+    try:
+        await asyncio.sleep(0.3)
+        r = await client.get(url)
+        if r.status_code != 200:
+            return None, None
+        html = r.text
+        chars = {}
+        for k, v in _CHAR_RE.findall(html):
+            chars[k.strip().rstrip(':')] = v.strip()
+
+        # Priority 1: кількість в упаковці кв.м (tile m² per package)
+        for key, val in chars.items():
+            kl = key.lower()
+            if 'кількість' in kl and 'упак' in kl and 'кв' in kl:
+                m = _NUM_RE.search(val)
+                if m:
+                    return float(m.group(1).replace(',', '.')), 'м²'
+
+        # Priority 2: вага (weight kg)
+        for key, val in chars.items():
+            if key.lower().startswith('вага'):
+                m = _NUM_RE.search(val)
+                if m:
+                    return float(m.group(1).replace(',', '.')), 'кг'
+
+        # Priority 3: об'єм / обсяг (volume l)
+        for key, val in chars.items():
+            if key.lower().startswith('об'):
+                m = _NUM_RE.search(val)
+                if m:
+                    return float(m.group(1).replace(',', '.')), 'л'
+    except Exception:
+        pass
+    return None, None
+
+
+async def _enrich_rows(rows: list, client, semaphore) -> None:
+    """Fetch product pages in parallel (limited concurrency) to get package sizes."""
+    async def enrich_one(row):
+        if not row.source_url or row.package_size is not None:
+            return
+        async with semaphore:
+            size, unit = await _fetch_product_chars(row.source_url, client)
+            if size is not None:
+                row.package_size = size
+                row.package_unit = unit
+
+    await asyncio.gather(*[enrich_one(r) for r in rows])
 
 
 def check_robots(base_url: str, path: str) -> bool:
@@ -157,6 +219,17 @@ class GenericAIAdapter:
                     if page == 1:
                         logger.warning(f"[{self.name}] {category}: no items extracted from {page_url}")
                 break  # no results on this page — stop paginating
+
+        # Enrich with package sizes from product pages
+        if all_rows and "epicentrk.ua" in self.base_url:
+            sem = asyncio.Semaphore(5)  # max 5 concurrent product page fetches
+            async with httpx.AsyncClient(
+                timeout=TIMEOUT,
+                headers={"User-Agent": USER_AGENT, "Accept-Language": "uk,en;q=0.9"},
+                follow_redirects=True,
+            ) as enrich_client:
+                await _enrich_rows(all_rows, enrich_client, sem)
+            logger.info(f"[{self.name}] enriched {len(all_rows)} rows with package sizes")
 
         return all_rows
 
