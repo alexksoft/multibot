@@ -20,7 +20,27 @@ logger = logging.getLogger(__name__)
 USER_AGENT = "PracticalAIAssistantsBot/1.0 (educational demo scraper)"
 CRAWL_DELAY = 2.0
 TIMEOUT = 15.0
-MAX_PAGES = 5  # max pages to paginate per category
+MAX_PAGES = 5
+
+# Regex to extract package size from product name
+# e.g. "25 кг", "10 л", "0.53x10 м", "2 м²", "1 рул"
+_PKG_RE = re.compile(
+    r'(\d+(?:[.,]\d+)?)\s*(\u043aг|літ|\u043b\b|м²|м2|м²|рул|пач|шт|kg|l|m2)',
+    re.IGNORECASE
+)
+
+
+def _parse_package(name: str) -> tuple[float | None, str | None]:
+    """Extract package size and unit from product name."""
+    m = _PKG_RE.search(name)
+    if m:
+        try:
+            size = float(m.group(1).replace(',', '.'))
+            unit = m.group(2).lower().replace('л\b', 'л').replace('m2', 'м²').replace('kg', 'кг')
+            return size, unit
+        except ValueError:
+            pass
+    return None, None  # max pages to paginate per category
 
 
 def check_robots(base_url: str, path: str) -> bool:
@@ -187,9 +207,11 @@ class GenericAIAdapter:
                     price = float(str(price_raw).replace(" ", "").replace(",", "."))
                     if price <= 0:
                         continue
+                    pkg_size, pkg_unit = _parse_package(name)
                     rows.append(ScrapedRow(
                         category=category, item=name[:100],
                         price=price, unit="грн",
+                        package_size=pkg_size, package_unit=pkg_unit,
                         source_name=self.name, source_url=item_url,
                         collected_at=today,
                     ))
@@ -222,9 +244,11 @@ class GenericAIAdapter:
                 price = float(price_str)
                 if price <= 0 or not name:
                     continue
+                pkg_size, pkg_unit = _parse_package(name)
                 rows.append(ScrapedRow(
                     category=category, item=name[:100],
                     price=price, unit="грн",
+                    package_size=pkg_size, package_unit=pkg_unit,
                     source_name=self.name, source_url=url,
                     collected_at=date.today().strftime("%Y-%m"),
                 ))
@@ -277,9 +301,11 @@ class GenericAIAdapter:
                         price = float(str(price_raw).replace(" ", "").replace(",", "."))
                         if price <= 0:
                             continue
+                        pkg_size, pkg_unit = _parse_package(name)
                         rows.append(ScrapedRow(
                             category=category, item=name[:100],
                             price=price, unit="грн",
+                            package_size=pkg_size, package_unit=pkg_unit,
                             source_name=self.name, source_url=url,
                             collected_at=today,
                         ))

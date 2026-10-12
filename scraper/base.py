@@ -14,6 +14,8 @@ class ScrapedRow(BaseModel):
     item: str
     price: float
     unit: str | None = None
+    package_size: float | None = None   # e.g. 25 (from "25 кг")
+    package_unit: str | None = None     # e.g. "кг", "м²", "л", "рул"
     source_name: str
     source_url: str
     collected_at: str
@@ -30,6 +32,7 @@ class SourceAdapter(Protocol):
 
 _SHEET_HEADER = [
     "category", "item", "price", "unit",
+    "package_size", "package_unit",
     "source_name", "source_url", "collected_at",
     "active", "notes"
 ]
@@ -73,6 +76,7 @@ class SheetsWriter:
         if rows:
             values = [
                 [r.category, r.item, r.price, r.unit or "",
+                 r.package_size or "", r.package_unit or "",
                  r.source_name, r.source_url, r.collected_at, "true", ""]
                 for r in rows
             ]
