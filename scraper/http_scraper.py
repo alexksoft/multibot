@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import date
 from urllib.robotparser import RobotFileParser
-from urllib.parse import urlparse, urlencode, urlunparse, parse_qs, urljoin
+from urllib.parse import urlparse, urlunparse, parse_qs
 
 import httpx
 
@@ -22,90 +22,23 @@ CRAWL_DELAY = 2.0
 TIMEOUT = 15.0
 MAX_PAGES = 5
 
-# Regex to extract package size from product name
-# e.g. "25 кг", "10 л", "0.53x10 м", "2 м²", "1 рул"
-_PKG_RE = re.compile(
-    r'(\d+(?:[.,]\d+)?)\s*(\u043aг|літ|\u043b\b|м²|м2|м²|рул|пач|шт|kg|l|m2)',
+# Price patterns on product pages
+_PRICE_PAIR_RE = re.compile(
+    r'([\d]+(?:[.,]\d+)?)\s*[₴грн]+\s*за\s*1\s*уп\.?\s*/\s*([\d]+(?:[.,]\d+)?)\s*[₴грн]+\s*за\s*1\s*кв\.?\s*м',
     re.IGNORECASE
 )
-
-
-def _parse_package(name: str) -> tuple[float | None, str | None]:
-    """Extract package size and unit from product name."""
-    m = _PKG_RE.search(name)
-    if m:
-        try:
-            size = float(m.group(1).replace(',', '.'))
-            unit = m.group(2).lower().replace('л\b', 'л').replace('m2', 'м²').replace('kg', 'кг')
-            return size, unit
-        except ValueError:
-            pass
-    return None, None
-
-
-_CHAR_RE = re.compile(
-    r'<dt[^>]*>\s*<span>([^<]+)</span>\s*</dt>\s*<dd[^>]*>\s*<span>([^<]+)</span>',
-    re.DOTALL
+_PRICE_PER_M2_RE = re.compile(
+    r'([\d]+(?:[.,]\d+)?)\s*(?:₴|грн)\s*/\s*кв\.?\s*м',
+    re.IGNORECASE
 )
 _NUM_RE = re.compile(r'([\d]+(?:[.,]\d+)?)')
 
 
-async def _fetch_product_chars(url: str, client) -> tuple:
-    """
-    Fetch product page, extract package_size + package_unit from characteristics.
-    Priority: кількість в упаковці кв.м (tile) > вага (kg) > об'єм (l)
-    """
-    try:
-        await asyncio.sleep(0.3)
-        r = await client.get(url)
-        if r.status_code != 200:
-            return None, None
-        html = r.text
-        chars = {}
-        for k, v in _CHAR_RE.findall(html):
-            chars[k.strip().rstrip(':')] = v.strip()
-
-        # Priority 1: кількість в упаковці кв.м (tile m² per package)
-        for key, val in chars.items():
-            kl = key.lower()
-            if 'кількість' in kl and 'упак' in kl and 'кв' in kl:
-                m = _NUM_RE.search(val)
-                if m:
-                    return float(m.group(1).replace(',', '.')), 'м²'
-
-        # Priority 2: вага (weight kg)
-        for key, val in chars.items():
-            if key.lower().startswith('вага'):
-                m = _NUM_RE.search(val)
-                if m:
-                    return float(m.group(1).replace(',', '.')), 'кг'
-
-        # Priority 3: об'єм / обсяг (volume l)
-        for key, val in chars.items():
-            if key.lower().startswith('об'):
-                m = _NUM_RE.search(val)
-                if m:
-                    return float(m.group(1).replace(',', '.')), 'л'
-    except Exception:
-        pass
-    return None, None
+def _n(s: str) -> float:
+    return float(s.replace(',', '.'))
 
 
-async def _enrich_rows(rows: list, client, semaphore) -> None:
-    """Fetch product pages in parallel (limited concurrency) to get package sizes."""
-    async def enrich_one(row):
-        if not row.source_url or row.package_size is not None:
-            return
-        async with semaphore:
-            size, unit = await _fetch_product_chars(row.source_url, client)
-            if size is not None:
-                row.package_size = size
-                row.package_unit = unit
-
-    await asyncio.gather(*[enrich_one(r) for r in rows])
-
-
-def check_robots(base_url: str, path: str) -> bool:
+def check_robots(base_url: str, path: str):
     try:
         rp = RobotFileParser()
         rp.set_url(f"{base_url}/robots.txt")
@@ -134,18 +67,11 @@ async def check_robots_async(url: str) -> dict:
     rp.parse(robots_text.splitlines())
     allowed = rp.can_fetch(USER_AGENT, url)
     delay = rp.crawl_delay(USER_AGENT) or rp.crawl_delay("*") or CRAWL_DELAY
-
-    return {
-        "allowed": allowed,
-        "delay": float(delay),
-        "robots_url": f"{base}/robots.txt",
-        "error": None,
-        "content": robots_text[:500],
-    }
+    return {"allowed": allowed, "delay": float(delay),
+            "robots_url": f"{base}/robots.txt", "error": None, "content": robots_text[:500]}
 
 
 def _page_url(url: str, page: int) -> str:
-    """Append ?page=N to a URL."""
     parsed = urlparse(url)
     qs = parse_qs(parsed.query)
     qs["page"] = [str(page)]
@@ -153,12 +79,126 @@ def _page_url(url: str, page: int) -> str:
     return urlunparse(parsed._replace(query=new_query))
 
 
-class GenericAIAdapter:
+async def _fetch_product_chars(url: str, client: httpx.AsyncClient) -> dict:
     """
-    Universal adapter: fetches any category page and uses AI to extract
-    product names and prices. Supports pagination for JSON-LD sites.
-    """
+    Fetch product page, extract package_size, package_unit, and price_per_m2
+    using BeautifulSoup for robust dt/dd parsing.
 
+    Returns dict with keys: package_size, package_unit, price_per_m2
+    """
+    result = {"package_size": None, "package_unit": None, "price_per_m2": None}
+    try:
+        await asyncio.sleep(0.3)
+        r = await client.get(url)
+        if r.status_code != 200:
+            return result
+        html = r.text
+
+        # --- Extract price per m² ---
+        # Priority 1: explicit pair "X грн за 1 уп. / Y грн за 1 кв. м"
+        m = _PRICE_PAIR_RE.search(html)
+        if m:
+            result["price_per_m2"] = _n(m.group(2))
+        else:
+            # Priority 2: standalone "N ₴/кв. м"
+            m = _PRICE_PER_M2_RE.search(html)
+            if m:
+                result["price_per_m2"] = _n(m.group(1))
+
+        # --- Extract package size using BeautifulSoup ---
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "lxml")
+        except ImportError:
+            soup = None
+
+        if soup:
+            chars = {}
+            for dt in soup.find_all("dt"):
+                dd = dt.find_next_sibling("dd")
+                if dd:
+                    key = dt.get_text(strip=True).rstrip(":")
+                    val = dd.get_text(strip=True)
+                    chars[key] = val
+        else:
+            # Fallback regex if BS4 not available
+            pairs = re.findall(
+                r'<dt[^>]*>\s*(?:<[^>]+>)*([^<]+)(?:<[^>]+>)*\s*</dt>\s*<dd[^>]*>\s*(?:<[^>]+>)*([^<]+)',
+                html
+            )
+            chars = {k.strip().rstrip(":"): v.strip() for k, v in pairs}
+
+        if not chars:
+            logger.warning(f"[chars] Empty characteristics from {url}")
+
+        # Priority 1: кількість в упаковці, кв.м (tile — m² per package)
+        for key, val in chars.items():
+            kl = key.lower()
+            if "кількість" in kl and "упак" in kl and "кв.м" in kl:
+                m = _NUM_RE.search(val)
+                if m:
+                    result["package_size"] = _n(m.group(1))
+                    result["package_unit"] = "м²"
+                    break
+
+        # Priority 2: вага (weight kg)
+        if result["package_size"] is None:
+            for key, val in chars.items():
+                if key.lower().startswith("вага"):
+                    m = _NUM_RE.search(val)
+                    if m:
+                        result["package_size"] = _n(m.group(1))
+                        result["package_unit"] = "кг"
+                        break
+
+        # Priority 3: об'єм / обсяг (volume l)
+        if result["package_size"] is None:
+            for key, val in chars.items():
+                if key.lower().startswith("об"):
+                    m = _NUM_RE.search(val)
+                    if m:
+                        result["package_size"] = _n(m.group(1))
+                        result["package_unit"] = "л"
+                        break
+
+    except Exception as e:
+        logger.warning(f"[chars] Failed for {url}: {e}")
+
+    return result
+
+
+async def _enrich_rows(rows: list[ScrapedRow], client: httpx.AsyncClient,
+                       semaphore: asyncio.Semaphore) -> None:
+    """
+    Fetch product pages in parallel to get accurate package_size and price_per_m².
+    Fix #1: always overwrite — never skip because name-regex already wrote a value.
+    Fix #2: runs for ALL sources, not just epicentrk.ua.
+    Fix #5: overwrite row.price with page-confirmed price_per_m² when available.
+    """
+    async def enrich_one(row: ScrapedRow):
+        if not row.source_url:
+            return
+        async with semaphore:
+            data = await _fetch_product_chars(row.source_url, client)
+
+        # Always overwrite package_size from page (fix #1)
+        if data["package_size"] is not None:
+            row.package_size = data["package_size"]
+            row.package_unit = data["package_unit"]
+
+        # Overwrite price with page-confirmed price_per_m² (fix #5)
+        if data["price_per_m2"] is not None:
+            row.price = data["price_per_m2"]
+            row.price_unit = "грн/м²"
+        elif data["package_size"] and data["package_unit"] == "м²" and data["package_size"] > 0:
+            # Normalize: per-package price → per-m² (Option A)
+            row.price = round(row.price / data["package_size"], 2)
+            row.price_unit = "грн/м²"
+
+    await asyncio.gather(*[enrich_one(r) for r in rows])
+
+
+class GenericAIAdapter:
     def __init__(self, source_name: str, base_url: str,
                  kiro_url: str = "", kiro_key: str = ""):
         self.name = source_name
@@ -189,16 +229,14 @@ class GenericAIAdapter:
                     logger.error(f"[{self.name}] fetch failed {page_url}: {e}")
                     break
 
-                # Try JSON-LD first
                 rows = self._parse_jsonld(html, category, page_url, today)
                 if rows:
                     logger.info(f"[{self.name}] {category} p{page}: {len(rows)} items via JSON-LD")
                     all_rows.extend(rows)
-                    if len(rows) < 10:  # last page has fewer items
+                    if len(rows) < 10:
                         break
                     continue
 
-                # Try site-specific HTML parsers
                 rows = self._parse_html(html, category, page_url, today)
                 if rows:
                     logger.info(f"[{self.name}] {category} p{page}: {len(rows)} items via HTML")
@@ -207,7 +245,6 @@ class GenericAIAdapter:
                         break
                     continue
 
-                # AI fallback — only on page 1 (too slow for pagination)
                 if page == 1 and self._kiro_url and self._kiro_key:
                     rows = await self._parse_with_ai(html, category, page_url, today)
                     if rows:
@@ -218,18 +255,18 @@ class GenericAIAdapter:
                 else:
                     if page == 1:
                         logger.warning(f"[{self.name}] {category}: no items extracted from {page_url}")
-                break  # no results on this page — stop paginating
+                break
 
-        # Enrich with package sizes from product pages
-        if all_rows and "epicentrk.ua" in self.base_url:
-            sem = asyncio.Semaphore(5)  # max 5 concurrent product page fetches
+        # Fix #2: enrich ALL sources (removed epicentrk.ua domain gate)
+        if all_rows:
+            sem = asyncio.Semaphore(5)
             async with httpx.AsyncClient(
                 timeout=TIMEOUT,
                 headers={"User-Agent": USER_AGENT, "Accept-Language": "uk,en;q=0.9"},
                 follow_redirects=True,
             ) as enrich_client:
                 await _enrich_rows(all_rows, enrich_client, sem)
-            logger.info(f"[{self.name}] enriched {len(all_rows)} rows with package sizes")
+            logger.info(f"[{self.name}] {category}: enriched {len(all_rows)} rows")
 
         return all_rows
 
@@ -259,7 +296,6 @@ class GenericAIAdapter:
             for item in candidates:
                 if not isinstance(item, dict):
                     continue
-                # Unwrap ListItem → item
                 if item.get("@type") == "ListItem" and "item" in item:
                     item = item["item"]
                 if not isinstance(item, dict):
@@ -280,11 +316,9 @@ class GenericAIAdapter:
                     price = float(str(price_raw).replace(" ", "").replace(",", "."))
                     if price <= 0:
                         continue
-                    pkg_size, pkg_unit = _parse_package(name)
                     rows.append(ScrapedRow(
                         category=category, item=name[:100],
-                        price=price, unit="грн",
-                        package_size=pkg_size, package_unit=pkg_unit,
+                        price=price, price_unit="грн",
                         source_name=self.name, source_url=item_url,
                         collected_at=today,
                     ))
@@ -293,19 +327,12 @@ class GenericAIAdapter:
         return rows
 
     def _parse_html(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
-        """Site-specific HTML parsers keyed by domain."""
         if "budpostach.ua" in self.base_url:
             return self._parse_budpostach(html, category, url, today)
         return []
 
     def _parse_budpostach(self, html: str, category: str, url: str, today: str) -> list[ScrapedRow]:
-        """
-        Budpostach: product cards have product-thumb__name for title
-        and data-special (discounted) or data-price for price.
-        Extract them in order — they appear in the same sequence.
-        """
         names = re.findall(r'class="product-thumb__name[^"]*"[^>]*>([^<]{5,120})', html)
-        # data-special is the actual selling price; fall back to data-price
         prices_raw = re.findall(r'data-special="(\d+)"', html)
         if not prices_raw:
             prices_raw = re.findall(r'data-price="(\d+)"', html)
@@ -317,11 +344,9 @@ class GenericAIAdapter:
                 price = float(price_str)
                 if price <= 0 or not name:
                     continue
-                pkg_size, pkg_unit = _parse_package(name)
                 rows.append(ScrapedRow(
                     category=category, item=name[:100],
-                    price=price, unit="грн",
-                    package_size=pkg_size, package_unit=pkg_unit,
+                    price=price, price_unit="грн",
                     source_name=self.name, source_url=url,
                     collected_at=date.today().strftime("%Y-%m"),
                 ))
@@ -341,7 +366,7 @@ class GenericAIAdapter:
             f"Category: '{category}'. Page: {url}\n"
             f"Rules:\n"
             f"- Return ONLY a JSON array, no markdown, no explanation\n"
-            f"- Each element: {{\"name\": \"full product name\", \"price\": 123.0}}\n"
+            f'- Each element: {{"name": "full product name", "price": 123.0}}\n'
             f"- price must be a number (UAH), not a string\n"
             f"- Skip items without a clear price\n"
             f"- Extract up to 30 items\n"
@@ -374,11 +399,9 @@ class GenericAIAdapter:
                         price = float(str(price_raw).replace(" ", "").replace(",", "."))
                         if price <= 0:
                             continue
-                        pkg_size, pkg_unit = _parse_package(name)
                         rows.append(ScrapedRow(
                             category=category, item=name[:100],
-                            price=price, unit="грн",
-                            package_size=pkg_size, package_unit=pkg_unit,
+                            price=price, price_unit="грн",
                             source_name=self.name, source_url=url,
                             collected_at=today,
                         ))
