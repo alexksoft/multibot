@@ -64,16 +64,16 @@ class KnowledgeBase:
         return self._norms
 
     def format_price(self, item: CatalogItem) -> str:
-        price_str = ""
-        if item.price is not None:
-            price_int = int(item.price)
-            if item.price == price_int:
-                price_str = f"{price_int:,}".replace(",", " ")
-            else:
-                price_str = f"{item.price:,.2f}".replace(",", " ")
-            price_str += f" {item.unit or 'грн'}"
+        if item.price is None:
+            return "ціна невідома"
+        price_int = int(item.price)
+        if item.price == price_int:
+            price_str = f"{price_int:,}".replace(",", " ")
+        else:
+            price_str = f"{item.price:,.2f}".replace(",", " ")
+        unit = item.unit or "грн"
         source = f" ({item.source_name})" if item.source_name else ""
-        return price_str + source if price_str else "ціна невідома"
+        return f"{price_str} {unit}{source}"
 
     def _fmt_num(self, price: float) -> str:
         price_int = int(price)

@@ -60,13 +60,15 @@ class GoogleSheetsCatalog:
             price = float(str(price_raw).replace(",", ".")) if price_raw not in ("", None) else None
             source_name = str(row.get("source_name", "")).strip() or None
             if price is not None and not source_name:
-                return None  # Req 6.4: price without source is unreliable
+                return None
             active_raw = row.get("active", "true")
+            # price_unit column (new) falls back to legacy unit column
+            price_unit = str(row.get("price_unit", "")).strip() or str(row.get("unit", "")).strip() or "грн"
             return CatalogItem(
                 category=str(row.get("category", "")).strip(),
                 item=str(row.get("item", "")).strip(),
                 price=price,
-                unit=str(row.get("unit", "")).strip() or None,
+                unit=price_unit,
                 source_name=source_name,
                 source_url=str(row.get("source_url", "")).strip() or None,
                 collected_at=str(row.get("collected_at", "")).strip() or None,
