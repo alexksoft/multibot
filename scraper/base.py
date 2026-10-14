@@ -88,7 +88,6 @@ class SheetsWriter:
         ws = self._get_ws(worksheet_name)
         all_records = ws.get_all_records()
 
-        # Build index: (category, item, source_name) → row_number (1-based, +1 for header)
         existing: dict[tuple, int] = {}
         for i, rec in enumerate(all_records, start=2):
             key = (str(rec.get("category", "")), str(rec.get("item", "")), str(rec.get("source_name", "")))
@@ -96,17 +95,16 @@ class SheetsWriter:
 
         new_keys = {(r.category, r.item, r.source_name) for r in rows}
 
-        # Mark stale rows as inactive
         for key, row_num in existing.items():
             if key not in new_keys:
                 col_active = _SHEET_HEADER.index("active") + 1
                 ws.update_cell(row_num, col_active, "false")
 
-        # Upsert new rows
         for row in rows:
             key = (row.category, row.item, row.source_name)
             values = [
-                row.category, row.item, row.price, row.unit or "",
+                row.category, row.item, row.price, row.price_unit,
+                row.package_size or "", row.package_unit or "",
                 row.source_name, row.source_url, row.collected_at,
                 "true", ""
             ]
