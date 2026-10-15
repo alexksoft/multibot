@@ -32,6 +32,53 @@ _PRICE_PER_M2_RE = re.compile(
     re.IGNORECASE
 )
 _NUM_RE = re.compile(r'([\d]+(?:[.,]\d+)?)')
+_VALUE_NUM_UNIT_RE = re.compile(
+    r'([\d]+(?:[.,]\d+)?)\s*(кг|г|л|мл|м²|м2|шт|рул|пач)\b',
+    re.IGNORECASE
+)
+
+
+def _normalize_weight(value: float, unit: str) -> tuple:
+    if unit.lower() == "г":
+        return value / 1000, "кг"
+    return value, unit
+
+
+def _extract_pkg_from_chars(chars: dict) -> tuple:
+    # Priority 1: tile — area per package
+    for key, val in chars.items():
+        kl = key.lower()
+        if "кількість" in kl and "упак" in kl and "кв.м" in kl:
+            m = _NUM_RE.search(val)
+            if m:
+                return _n(m.group(1)), "м²"
+
+    # Priority 2: фасування — actual packaging size
+    for key, val in chars.items():
+        if key.lower().startswith("фасування"):
+            m = _VALUE_NUM_UNIT_RE.search(val)
+            if m:
+                return _normalize_weight(_n(m.group(1)), m.group(2))
+
+    # Priority 3: вага упаковки — fallback with gram→kg conversion
+    for key, val in chars.items():
+        if key.lower().startswith("вага"):
+            m = _VALUE_NUM_UNIT_RE.search(val)
+            if m:
+                return _normalize_weight(_n(m.group(1)), m.group(2))
+            m = _NUM_RE.search(val)
+            if m:
+                return _normalize_weight(_n(m.group(1)), "кг")
+
+    # Priority 4: об'єм — liquids
+    for key, val in chars.items():
+        kl = key.lower()
+        if kl.startswith("об'єм") or kl.startswith("обєм") or kl.startswith("об\u2019єм"):
+            m = _VALUE_NUM_UNIT_RE.search(val)
+            if m:
+                return _n(m.group(1)), m.group(2)
+
+    return None, None
 
 
 def _n(s: str) -> float:
@@ -131,35 +178,7 @@ async def _fetch_product_chars(url: str, client: httpx.AsyncClient) -> dict:
         if not chars:
             logger.warning(f"[chars] Empty characteristics from {url}")
 
-        # Priority 1: кількість в упаковці, кв.м (tile — m² per package)
-        for key, val in chars.items():
-            kl = key.lower()
-            if "кількість" in kl and "упак" in kl and "кв.м" in kl:
-                m = _NUM_RE.search(val)
-                if m:
-                    result["package_size"] = _n(m.group(1))
-                    result["package_unit"] = "м²"
-                    break
-
-        # Priority 2: вага (weight kg)
-        if result["package_size"] is None:
-            for key, val in chars.items():
-                if key.lower().startswith("вага"):
-                    m = _NUM_RE.search(val)
-                    if m:
-                        result["package_size"] = _n(m.group(1))
-                        result["package_unit"] = "кг"
-                        break
-
-        # Priority 3: об'єм / обсяг (volume l)
-        if result["package_size"] is None:
-            for key, val in chars.items():
-                if key.lower().startswith("об"):
-                    m = _NUM_RE.search(val)
-                    if m:
-                        result["package_size"] = _n(m.group(1))
-                        result["package_unit"] = "л"
-                        break
+        result["package_size"], result["package_unit"] = _extract_pkg_from_chars(chars)
 
     except Exception as e:
         logger.warning(f"[chars] Failed for {url}: {e}")
