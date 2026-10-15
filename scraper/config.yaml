@@ -9,30 +9,28 @@ bots:
         url: https://epicentrk.ua/ua/shop/plitka/
       - name: Штукатурка
         url: https://epicentrk.ua/ua/shop/shtukaturka/
-    - name: Budpostach
-      base_url: https://budpostach.ua
-      categories:
-      - name: Плитка
-        url: https://budpostach.ua/ua/plitka/
-      - name: Фарба
-        url: https://budpostach.ua/ua/farby/
-      - name: Штукатурка
-        url: https://budpostach.ua/ua/shtukaturka/
-      - name: Клей
-        url: https://budpostach.ua/ua/klej/
+      - name: Шпаклівка
+        url: https://epicentrk.ua/ua/shop/shpaklevka/
       - name: Ґрунтовка
-        url: https://budpostach.ua/ua/grunty/
-    - name: F.ua
-      base_url: https://f.ua
-      categories:
-      - name: Плитка
-        url: https://f.ua/shop/plitka/
+        url: https://epicentrk.ua/ua/shop/gruntovka/
+      - name: Клей
+        url: https://epicentrk.ua/ua/shop/kley-dlya-plitki/
       - name: Фарба
-        url: https://f.ua/shop/farby/
-      - name: Штукатурка
-        url: https://f.ua/shop/shtukaturka/
-      - name: Клей для плитки
-        url: https://f.ua/shop/klej-dlya-plitki/
+        url: https://epicentrk.ua/ua/shop/kraski/
+      - name: Затирка
+        url: https://epicentrk.ua/ua/shop/fuga/
+      - name: Шпалери
+        url: https://epicentrk.ua/ua/shop/oboi/
+      - name: Клей для шпалер
+        url: https://epicentrk.ua/ua/shop/kley-dlya-oboev/
+      - name: Цементна стяжка
+        url: https://epicentrk.ua/ua/shop/styazhka/fs/osnova-cementnaya/
+      - name: Фібра
+        url: https://epicentrk.ua/ua/shop/fibra-stroitelnaya/
+      - name: Ламінат
+        url: https://epicentrk.ua/ua/shop/laminat/
+      - name: Підкладка
+        url: https://epicentrk.ua/ua/shop/podlozhka/fs/naznachenie-pod-laminat/
   beauty_assistant:
     worksheet: beauty_assistant_prices
     sources: []
