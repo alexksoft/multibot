@@ -64,6 +64,9 @@ class GoogleSheetsCatalog:
             active_raw = row.get("active", "true")
             # price_unit column (new) falls back to legacy unit column
             price_unit = str(row.get("price_unit", "")).strip() or str(row.get("unit", "")).strip() or "грн"
+            package_size_raw = row.get("package_size", "")
+            package_size = float(str(package_size_raw).replace(",", ".")) if package_size_raw not in ("", None) else None
+            package_unit = str(row.get("package_unit", "")).strip() or None
             return CatalogItem(
                 category=str(row.get("category", "")).strip(),
                 item=str(row.get("item", "")).strip(),
@@ -72,6 +75,8 @@ class GoogleSheetsCatalog:
                 source_name=source_name,
                 source_url=str(row.get("source_url", "")).strip() or None,
                 collected_at=str(row.get("collected_at", "")).strip() or None,
+                package_size=package_size,
+                package_unit=package_unit,
                 attributes={},
                 active=_bool(active_raw),
                 notes=str(row.get("notes", "")).strip(),

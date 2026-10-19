@@ -88,56 +88,88 @@ class ShoppingList:
 
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
+        import math
+        import re as _re
         calc_data = collected.get("_calc_results", {})
         lines = ["Список покупок:"]
         shopping_results = {}
+        total = 0.0
+
         for rule_id, info in calc_data.items():
             if rule_id in self._SKIP_RULES or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
                 continue
             category = info.get("label", rule_id)
-            qty = info.get("value", "?")
-            unit = info.get("unit", "")
+            rule_unit = info.get("unit", "")
+            try:
+                qty = float(str(info.get("value", 0)).replace(",", "."))
+            except (ValueError, TypeError):
+                qty = 0.0
+
             item = await knowledge.cheapest_item(category)
-            if item:
-                price_str = knowledge.format_price(item)
-                url = item.source_url or ""
-                name = item.item[:60]
-                if url:
-                    linked = f'<a href="{url}">{name}</a>'
-                else:
-                    linked = name
-                lines.append(f"• {category}: {qty} {unit}\n  {linked} — {price_str}")
+            if not item:
+                lines.append(f"• {category}: {qty} {rule_unit} (ціна не знайдена в каталозі)")
                 shopping_results[rule_id] = {
-                    "label": category, "qty": qty, "unit": unit,
-                    "price_str": price_str,
-                    "item_name": item.item,
-                    "source_url": url,
+                    "label": category, "qty": qty, "unit": rule_unit,
+                    "qty_display": f"{qty} {rule_unit}",
+                    "price_str": "—", "item_name": "", "source_url": "",
                 }
-            else:
-                lines.append(f"• {category}: {qty} {unit} (ціна не знайдена в каталозі)")
-                shopping_results[rule_id] = {"label": category, "qty": qty, "unit": unit, "price_str": "—", "item_name": "", "source_url": ""}
-        if len(lines) == 1:
-            return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
-        # Calculate total
-        import re as _re
-        total = 0.0
-        for e in shopping_results.values():
-            ps = e.get("price_str", "") or ""
-            m = _re.match(r"([\d\s]+)", ps.replace("\xa0", " ").replace("\u00a0", " "))
+                continue
+
+            # --- package rounding ---
+            pkg_size = item.package_size
+            pkg_unit = item.package_unit
+            unit_price = 0.0
+            m = _re.match(r"([\d\s]+(?:[.,]\d+)?)", (knowledge.format_price(item) or "").replace("\xa0", " "))
             if m:
                 try:
-                    unit_price = float(m.group(1).replace(" ", ""))
-                    try:
-                        qty = float(str(e.get("qty", 1)).replace(",", "."))
-                    except (ValueError, TypeError):
-                        qty = 1.0
-                    total += unit_price * qty
+                    unit_price = float(m.group(1).replace(" ", "").replace(",", "."))
                 except ValueError:
                     pass
+
+            # unit conversion: rule кг vs package г
+            qty_norm = qty
+            if pkg_unit and rule_unit:
+                if rule_unit == "кг" and pkg_unit == "г":
+                    qty_norm = qty * 1000
+                elif rule_unit == "г" and pkg_unit == "кг":
+                    qty_norm = qty / 1000
+                elif rule_unit == "л" and pkg_unit == "мл":
+                    qty_norm = qty * 1000
+                elif rule_unit == "мл" and pkg_unit == "л":
+                    qty_norm = qty / 1000
+
+            if pkg_size and pkg_size > 0:
+                packages = math.ceil(qty_norm / pkg_size)
+                qty_display = f"{packages} уп. × {pkg_size:g} {pkg_unit}"
+                total += unit_price * packages
+            else:
+                packages = None
+                qty_display = f"{qty:g} {rule_unit}"
+                total += unit_price * qty
+
+            price_str = knowledge.format_price(item)
+            url = item.source_url or ""
+            name = item.item[:60]
+            linked = f'<a href="{url}">{name}</a>' if url else name
+            lines.append(f"• {category}: {qty_display}\n  {linked} — {price_str}")
+            shopping_results[rule_id] = {
+                "label": category, "qty": qty, "unit": rule_unit,
+                "qty_display": qty_display,
+                "packages": packages,
+                "pkg_size": pkg_size, "pkg_unit": pkg_unit,
+                "price_str": price_str,
+                "item_name": item.item,
+                "source_url": url,
+            }
+
+        if len(lines) == 1:
+            return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
+
         if total > 0:
             total_str = f"{int(total):,}".replace(",", " ")
             lines.append(f"\nРазом орієнтовно: {total_str} грн")
             shopping_results["_total"] = total_str
+
         collected["_shopping_results"] = shopping_results
         return CapabilityResult(True, "\n".join(lines), data=shopping_results)
 
@@ -249,7 +281,7 @@ class PrepareRequest:
                     linked = item_name[:60]
                 else:
                     linked = ""
-                qty_str = f"{entry.get('qty','')} {entry.get('unit','')}".strip()
+                qty_str = entry.get("qty_display") or f"{entry.get('qty','')} {entry.get('unit','')}".strip()
                 line = f"  {entry['label']}: {qty_str}"
                 if linked:
                     line += f"\n  {linked} — {price}"
@@ -354,7 +386,7 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                     continue
                 item_name = entry.get("item_name", "")
                 url = entry.get("source_url", "")
-                qty_str = f"{entry.get('qty','')} {entry.get('unit','')}".strip()
+                qty_str = entry.get("qty_display") or f"{entry.get('qty','')} {entry.get('unit','')}".strip()
                 # Category label bold + item name as link below
                 if item_name and url:
                     cell = Paragraph(
