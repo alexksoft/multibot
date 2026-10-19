@@ -114,6 +114,8 @@ class CatalogItem(BaseModel):
     source_name: str | None = None
     source_url: str | None = None
     collected_at: str | None = None
+    package_size: float | None = None
+    package_unit: str | None = None
     attributes: dict = {}
     active: bool = True
     notes: str = ""
