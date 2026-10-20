@@ -32,7 +32,7 @@ def can_calculate(rule_unit: str, pkg_unit: str, price_unit: str, pkg_size) -> b
 
 def load_items(creds_path: str, sheet_id: str) -> list:
     """Read the Плитка worksheet and return CatalogItem objects."""
-    from src.multibot.config.sections import CatalogItem
+    from ....config.sections import CatalogItem
     import gspread
     result = []
     try:
