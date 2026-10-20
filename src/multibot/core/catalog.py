@@ -24,9 +24,9 @@ class LocalCatalog:
 
 class MultiCategorySheetsCatalog:
     """
-    Loads items from Google Sheets by delegating to each category script.
-    Each category script knows its own worksheet name and column structure.
-    No if/else logic here — just call load_items() on each category module.
+    Loads items from Google Sheets by calling load_items() on each calculator module.
+    Each calculator knows its own worksheet name and column structure.
+    No parsing logic here — that belongs to each calculator.
     """
 
     def __init__(self, creds_path: str, sheet_id: str, ttl: int):
@@ -41,8 +41,8 @@ class MultiCategorySheetsCatalog:
         if self._cache and (now - self._cache_time) < self._ttl:
             return self._cache
 
-        # Import all category modules — each one loads its own worksheet
-        from scraper.categories import (
+        # Each calculator module knows its own worksheet and columns
+        from ..capabilities.calculators import (
             plaster, putty, primer, paint,
             tile_material, tile_glue, grout,
             screed, fiber,

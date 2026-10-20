@@ -35,3 +35,33 @@ def calculate(qty_kg: float, pkg_size_kg: float, price_per_bag: float) -> dict:
 
 def can_calculate(rule_unit: str, pkg_unit: str, pkg_size) -> bool:
     return rule_unit == "кг" and pkg_unit == "кг" and pkg_size
+
+
+def load_items(creds_path: str, sheet_id: str) -> list:
+    """Read the Шпаклівка worksheet and return CatalogItem objects."""
+    from src.multibot.config.sections import CatalogItem
+    import gspread
+    result = []
+    try:
+        gc = gspread.service_account(filename=creds_path)
+        ws = gc.open_by_key(sheet_id).worksheet(CATEGORY)
+        for row in ws.get_all_records():
+            if str(row.get("active", "true")).lower() not in ("true", "1", "так"):
+                continue
+            try:
+                price = float(str(row.get("price", "")).replace(",", "."))
+                w = row.get("weight_kg", "")
+                weight_kg = float(str(w).replace(",", ".")) if w not in ("", None) else None
+                result.append(CatalogItem(
+                    category=CATEGORY, item=str(row.get("item", "")).strip(),
+                    price=price, unit=str(row.get("price_unit", "грн")).strip(),
+                    source_name=str(row.get("source_name", "")).strip() or None,
+                    source_url=str(row.get("source_url", "")).strip() or None,
+                    collected_at=str(row.get("collected_at", "")).strip() or None,
+                    package_size=weight_kg, package_unit="кг" if weight_kg else None,
+                ))
+            except Exception:
+                continue
+    except Exception as e:
+        import logging; logging.getLogger(__name__).warning(f"[{CATEGORY}] load_items failed: {e}")
+    return result
