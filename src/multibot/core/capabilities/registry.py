@@ -127,7 +127,7 @@ class ShoppingList:
                 except ValueError:
                     pass
 
-            calc = dispatch(rule_unit, pkg_unit, price_unit, qty, pkg_size, unit_price)
+            calc = dispatch(category, rule_unit, pkg_unit, price_unit, qty, pkg_size, unit_price)
             packages = calc["packages"]
             qty_display = calc["qty_display"]
             if calc["total_price"] is not None:
