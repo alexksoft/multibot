@@ -38,14 +38,14 @@ def load_items(creds_path: str, sheet_id: str) -> list:
     try:
         gc = gspread.service_account(filename=creds_path)
         ws = gc.open_by_key(sheet_id).worksheet(CATEGORY)
-        for row_idx, row in enumerate(ws.get_all_records(), start=2):
+        from ._sheets import get_rows, to_float
+        for row_idx, row in enumerate(get_rows(ws), start=2):
             active_val = str(row.get("active", "")).strip().lower()
             if active_val and active_val not in ("true", "1", "так", "yes"):
                 continue
             try:
-                price = float(str(row.get("price", "")).replace("\xa0", "").replace(" ", "").replace(",", "."))
-                b = row.get("box_m2", "")
-                box_m2 = float(str(b).replace("\xa0", "").replace(" ", "").replace(",", ".")) if b not in ("", None) else None
+                price = to_float(row.get("price"))
+                box_m2 = to_float(row.get("box_m2"))
                 result.append(CatalogItem(
                     category=CATEGORY, item=str(row.get("item", "")).strip(),
                     price=price, unit=str(row.get("price_unit", "грн/м²")).strip(),
