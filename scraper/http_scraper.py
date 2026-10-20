@@ -60,7 +60,15 @@ def _extract_pkg_from_chars(chars: dict) -> tuple:
             if m:
                 return _normalize_weight(_n(m.group(1)), m.group(2))
 
-    # Priority 3: вага упаковки — fallback with gram→kg conversion
+    # Priority 3: об'єм — volume in litres (paint, primer) — before weight
+    for key, val in chars.items():
+        kl = key.lower()
+        if kl.startswith("об'єм") or kl.startswith("обєм") or kl.startswith("об\u2019єм") or kl.startswith("об`єм"):
+            m = _VALUE_NUM_UNIT_RE.search(val)
+            if m:
+                return _n(m.group(1)), m.group(2)
+
+    # Priority 4: вага упаковки — fallback with gram→kg conversion
     for key, val in chars.items():
         if key.lower().startswith("вага"):
             m = _VALUE_NUM_UNIT_RE.search(val)
@@ -69,14 +77,6 @@ def _extract_pkg_from_chars(chars: dict) -> tuple:
             m = _NUM_RE.search(val)
             if m:
                 return _normalize_weight(_n(m.group(1)), "кг")
-
-    # Priority 4: об'єм — liquids
-    for key, val in chars.items():
-        kl = key.lower()
-        if kl.startswith("об'єм") or kl.startswith("обєм") or kl.startswith("об\u2019єм"):
-            m = _VALUE_NUM_UNIT_RE.search(val)
-            if m:
-                return _n(m.group(1)), m.group(2)
 
     return None, None
 
