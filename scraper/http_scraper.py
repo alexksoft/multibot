@@ -45,40 +45,58 @@ def _normalize_weight(value: float, unit: str) -> tuple:
 
 
 def _extract_pkg_from_chars(chars: dict) -> tuple:
-    # Priority 1: tile — area per package
+    """
+    Extract package weight (size, unit) and volume in litres separately.
+    Returns: (package_size, package_unit, volume_l)
+    Both can be found on the same product page independently.
+    """
+    package_size = None
+    package_unit = None
+    volume_l = None
+
+    # --- Volume (litres) --- always extract if present, independent of weight
+    for key, val in chars.items():
+        kl = key.lower()
+        if kl.startswith("об'єм") or kl.startswith("обєм") or kl.startswith("об\u2019єм") or kl.startswith("об`єм"):
+            m = _VALUE_NUM_UNIT_RE.search(val)
+            if m and m.group(2).lower() in ("л", "мл"):
+                v = _n(m.group(1))
+                # convert ml → l
+                volume_l = v / 1000 if m.group(2).lower() == "мл" else v
+            break
+
+    # --- Package size (weight or area) ---
+
+    # Priority 1: tile — area per package (m²)
     for key, val in chars.items():
         kl = key.lower()
         if "кількість" in kl and "упак" in kl and "кв.м" in kl:
             m = _NUM_RE.search(val)
             if m:
-                return _n(m.group(1)), "м²"
+                package_size, package_unit = _n(m.group(1)), "м²"
+                return package_size, package_unit, volume_l
 
     # Priority 2: фасування — actual packaging size
     for key, val in chars.items():
         if key.lower().startswith("фасування"):
             m = _VALUE_NUM_UNIT_RE.search(val)
             if m:
-                return _normalize_weight(_n(m.group(1)), m.group(2))
+                package_size, package_unit = _normalize_weight(_n(m.group(1)), m.group(2))
+                return package_size, package_unit, volume_l
 
-    # Priority 3: об'єм — volume in litres (paint, primer) — before weight
-    for key, val in chars.items():
-        kl = key.lower()
-        if kl.startswith("об'єм") or kl.startswith("обєм") or kl.startswith("об\u2019єм") or kl.startswith("об`єм"):
-            m = _VALUE_NUM_UNIT_RE.search(val)
-            if m:
-                return _n(m.group(1)), m.group(2)
-
-    # Priority 4: вага упаковки — fallback with gram→kg conversion
+    # Priority 3: вага упаковки — weight fallback
     for key, val in chars.items():
         if key.lower().startswith("вага"):
             m = _VALUE_NUM_UNIT_RE.search(val)
             if m:
-                return _normalize_weight(_n(m.group(1)), m.group(2))
+                package_size, package_unit = _normalize_weight(_n(m.group(1)), m.group(2))
+                return package_size, package_unit, volume_l
             m = _NUM_RE.search(val)
             if m:
-                return _normalize_weight(_n(m.group(1)), "кг")
+                package_size, package_unit = _normalize_weight(_n(m.group(1)), "кг")
+                return package_size, package_unit, volume_l
 
-    return None, None
+    return package_size, package_unit, volume_l
 
 
 def _n(s: str) -> float:
@@ -133,7 +151,7 @@ async def _fetch_product_chars(url: str, client: httpx.AsyncClient) -> dict:
 
     Returns dict with keys: package_size, package_unit, price_per_m2
     """
-    result = {"package_size": None, "package_unit": None, "price_per_m2": None}
+    result = {"package_size": None, "package_unit": None, "volume_l": None, "price_per_m2": None}
     try:
         await asyncio.sleep(0.3)
         r = await client.get(url)
@@ -178,7 +196,7 @@ async def _fetch_product_chars(url: str, client: httpx.AsyncClient) -> dict:
         if not chars:
             logger.warning(f"[chars] Empty characteristics from {url}")
 
-        result["package_size"], result["package_unit"] = _extract_pkg_from_chars(chars)
+        result["package_size"], result["package_unit"], result["volume_l"] = _extract_pkg_from_chars(chars)
 
     except Exception as e:
         logger.warning(f"[chars] Failed for {url}: {e}")
@@ -200,10 +218,12 @@ async def _enrich_rows(rows: list[ScrapedRow], client: httpx.AsyncClient,
         async with semaphore:
             data = await _fetch_product_chars(row.source_url, client)
 
-        # Always overwrite package_size from page (fix #1)
+        # Always overwrite package_size and volume_l from page
         if data["package_size"] is not None:
             row.package_size = data["package_size"]
             row.package_unit = data["package_unit"]
+        if data["volume_l"] is not None:
+            row.volume_l = data["volume_l"]
 
         # Overwrite price with page-confirmed price_per_m² (fix #5)
         if data["price_per_m2"] is not None:

@@ -116,6 +116,7 @@ class CatalogItem(BaseModel):
     collected_at: str | None = None
     package_size: float | None = None
     package_unit: str | None = None
+    volume_l: float | None = None
     attributes: dict = {}
     active: bool = True
     notes: str = ""
