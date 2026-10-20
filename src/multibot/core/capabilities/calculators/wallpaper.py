@@ -1,31 +1,18 @@
 # wallpaper.py — Шпалери
 #
-# Шпалери are sold per ROLL.
-# The rule gives us how many ROLLS we need (already calculated from wall area).
-# Each item in the shop IS one roll — price is per roll.
+# Шпалери are sold per ROLL. Price is per roll (грн).
+# The rule gives us how many ROLLS we need.
 # We round UP to whole rolls.
-#
-# Example:
-#   Wall area = 48.6 м²
-#   Need: 48.6 / 5 m²/roll = 9.72  →  ceil = 10 rolls
-#   Price = 207 грн/roll  →  total = 10 × 207 = 2 070 грн
 
+import logging
 import math
+
+logger = logging.getLogger(__name__)
 
 CATEGORY = "Шпалери"
 
 
 def calculate(qty_rolls: float, price_per_roll: float) -> dict:
-    """
-    Args:
-        qty_rolls     -- number of rolls needed (from rule wallpaper_rl)
-        price_per_roll -- price of one roll in грн
-
-    Returns:
-        packages     -- number of rolls to buy (rounded up)
-        qty_display  -- e.g. "10 рул"
-        total_price  -- total cost in грн
-    """
     packages = math.ceil(round(qty_rolls, 6))
     qty_display = f"{packages} рул"
     total_price = price_per_roll * packages
@@ -37,23 +24,21 @@ def can_calculate(rule_unit: str) -> bool:
 
 
 def load_items(creds_path: str, sheet_id: str) -> list:
-    """
-    Read the Шпалери worksheet and return CatalogItem objects.
-    Price is per roll (грн). weight_kg = roll weight.
-    """
+    """Read the Шпалери worksheet and return CatalogItem objects."""
     from src.multibot.config.sections import CatalogItem
     import gspread
     result = []
     try:
         gc = gspread.service_account(filename=creds_path)
         ws = gc.open_by_key(sheet_id).worksheet(CATEGORY)
-        for row in ws.get_all_records():
-            if str(row.get("active", "true")).lower() not in ("true", "1", "так"):
+        for row_idx, row in enumerate(ws.get_all_records(), start=2):
+            active_val = str(row.get("active", "")).strip().lower()
+            if active_val and active_val not in ("true", "1", "так", "yes"):
                 continue
             try:
-                price = float(str(row.get("price", "")).replace(",", "."))
+                price = float(str(row.get("price", "")).replace("\xa0", "").replace(" ", "").replace(",", "."))
                 w = row.get("weight_kg", "")
-                weight_kg = float(str(w).replace(",", ".")) if w not in ("", None) else None
+                weight_kg = float(str(w).replace("\xa0", "").replace(" ", "").replace(",", ".")) if w not in ("", None) else None
                 result.append(CatalogItem(
                     category=CATEGORY, item=str(row.get("item", "")).strip(),
                     price=price, unit=str(row.get("price_unit", "грн")).strip(),
@@ -62,8 +47,8 @@ def load_items(creds_path: str, sheet_id: str) -> list:
                     collected_at=str(row.get("collected_at", "")).strip() or None,
                     package_size=weight_kg, package_unit="кг" if weight_kg else None,
                 ))
-            except Exception:
-                continue
+            except Exception as row_err:
+                logger.debug(f"[{CATEGORY}] row {row_idx} skipped: {row_err}")
     except Exception as e:
-        import logging; logging.getLogger(__name__).warning(f"[{CATEGORY}] load_items failed: {e}")
+        logger.warning(f"[{CATEGORY}] load_items failed: {e}")
     return result

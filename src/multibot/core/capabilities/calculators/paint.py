@@ -2,36 +2,30 @@
 #
 # Фарба is sold in cans measured in LITRES.
 # The rule gives us total LITRES needed.
-#
-# Problem: the scraper stores the package weight in KG (e.g. 16 кг for a 10-litre can).
-# We can't divide litres by kilograms to get a package count.
-#
-# What we do:
-#   - Show the raw litre quantity to the user
-#   - Show the price of one can as a reference
-#   - Skip this item in the total
-#
-# Example:
-#   Wall area = 48.6 м²
-#   Need: 48.6 × 0.25 l/m² = 12.2 л
-#   Display: "12.2 л  →  Фарба Feidal Hit 10л — 1 014 грн/уп (Епіцентр)"
+# We use volume_l from the sheet to calculate how many cans to buy.
+
+import logging
+import math
+
+logger = logging.getLogger(__name__)
 
 CATEGORY = "Фарба"
 
 
-def calculate(qty_l: float, price_per_can: float) -> dict:
+def calculate(qty_l: float, price_per_can: float, volume_l_per_can: float = None) -> dict:
     """
-    Args:
-        qty_l        -- litres of paint needed (from rule paint_l)
-        price_per_can -- price of one can in грн (shown as reference only)
-
-    Returns:
-        packages     -- None
-        qty_display  -- e.g. "12.2 л"
-        total_price  -- None (excluded from total)
+    If volume_l_per_can is known: packages = ceil(qty_l / volume_l_per_can).
+    Otherwise: show raw litres, no total.
     """
-    qty_display = f"{qty_l:g} л"
-    return {"packages": None, "qty_display": qty_display, "total_price": None}
+    if volume_l_per_can and volume_l_per_can > 0:
+        packages = math.ceil(round(qty_l / volume_l_per_can, 6))
+        qty_display = f"{packages} уп. × {volume_l_per_can:g} л"
+        total_price = price_per_can * packages
+    else:
+        packages = None
+        qty_display = f"{qty_l:g} л"
+        total_price = None
+    return {"packages": packages, "qty_display": qty_display, "total_price": total_price}
 
 
 def can_calculate(rule_unit: str, pkg_unit: str, pkg_size) -> bool:
@@ -39,25 +33,23 @@ def can_calculate(rule_unit: str, pkg_unit: str, pkg_size) -> bool:
 
 
 def load_items(creds_path: str, sheet_id: str) -> list:
-    """
-    Read the Фарба worksheet and return CatalogItem objects.
-    Reads volume_l (litres) so the calculator can use it for package count.
-    """
+    """Read the Фарба worksheet and return CatalogItem objects."""
     from src.multibot.config.sections import CatalogItem
     import gspread
     result = []
     try:
         gc = gspread.service_account(filename=creds_path)
         ws = gc.open_by_key(sheet_id).worksheet(CATEGORY)
-        for row in ws.get_all_records():
-            if str(row.get("active", "true")).lower() not in ("true", "1", "так"):
+        for row_idx, row in enumerate(ws.get_all_records(), start=2):
+            active_val = str(row.get("active", "")).strip().lower()
+            if active_val and active_val not in ("true", "1", "так", "yes"):
                 continue
             try:
-                price = float(str(row.get("price", "")).replace(",", "."))
+                price = float(str(row.get("price", "")).replace("\xa0", "").replace(" ", "").replace(",", "."))
                 v = row.get("volume_l", "")
-                volume_l = float(str(v).replace(",", ".")) if v not in ("", None) else None
+                volume_l = float(str(v).replace("\xa0", "").replace(" ", "").replace(",", ".")) if v not in ("", None) else None
                 w = row.get("weight_kg", "")
-                weight_kg = float(str(w).replace(",", ".")) if w not in ("", None) else None
+                weight_kg = float(str(w).replace("\xa0", "").replace(" ", "").replace(",", ".")) if w not in ("", None) else None
                 result.append(CatalogItem(
                     category=CATEGORY, item=str(row.get("item", "")).strip(),
                     price=price, unit=str(row.get("price_unit", "грн")).strip(),
@@ -67,8 +59,8 @@ def load_items(creds_path: str, sheet_id: str) -> list:
                     package_size=weight_kg, package_unit="кг" if weight_kg else None,
                     volume_l=volume_l,
                 ))
-            except Exception:
-                continue
+            except Exception as row_err:
+                logger.debug(f"[{CATEGORY}] row {row_idx} skipped: {row_err}")
     except Exception as e:
-        import logging; logging.getLogger(__name__).warning(f"[{CATEGORY}] load_items failed: {e}")
+        logger.warning(f"[{CATEGORY}] load_items failed: {e}")
     return result
