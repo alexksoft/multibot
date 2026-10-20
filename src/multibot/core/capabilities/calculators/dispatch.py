@@ -42,6 +42,8 @@ def dispatch(
     qty: float,
     pkg_size,
     unit_price: float,
+    item_name: str = "",
+    volume_l: float = None,
 ) -> dict:
     """
     Pick the right calculator for this category and return a unified result.
@@ -61,7 +63,7 @@ def dispatch(
     # --- Ґрунтовка / Фарба ---
     elif mod in (primer, paint):
         if mod.can_calculate(rule_unit, pkg_unit, pkg_size):
-            return mod.calculate(qty, unit_price)
+            return mod.calculate(qty, unit_price, volume_l)
 
     # --- Плитка ---
     elif mod is tile_material:
