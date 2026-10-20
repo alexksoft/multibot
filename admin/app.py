@@ -328,8 +328,11 @@ async def run_scraper(
     bot_name: str = Form(...),
     _=Depends(require_session),
 ):
-    from scraper.__main__ import run as do_scrape
     from scraper.base import SheetsWriter
+    from scraper.categories import (
+        plaster, putty, primer, paint, tile_material, tile_glue,
+        grout, screed, fiber, laminate, underlay, wallpaper, wallpaper_glue,
+    )
 
     configs = load_configs(settings.bots_dir)
     cfg = next((c for c in configs if c.name == bot_name), None)
@@ -337,31 +340,22 @@ async def run_scraper(
     if cfg and cfg.knowledge.sheets.enabled:
         sheet_id = os.environ.get(cfg.knowledge.sheets.sheet_id_env, "")
 
+    ALL = [plaster, putty, primer, paint, tile_material, tile_glue,
+           grout, screed, fiber, laminate, underlay, wallpaper, wallpaper_glue]
+
     errors = []
     rows_collected = 0
-    try:
-        # run() fetches all categories and writes each to its own worksheet
-        import asyncio
-        from scraper.categories import (
-            plaster, putty, primer, paint, tile_material, tile_glue,
-            grout, screed, fiber, laminate, underlay, wallpaper, wallpaper_glue,
-        )
-        ALL = [plaster, putty, primer, paint, tile_material, tile_glue,
-               grout, screed, fiber, laminate, underlay, wallpaper, wallpaper_glue]
-
-        writer = SheetsWriter(settings.google_creds_path, sheet_id)
-        for mod in ALL:
-            try:
-                rows = await mod.fetch(
-                    kiro_url=settings.kiro_gateway_url,
-                    kiro_key=settings.kiro_gateway_api_key,
-                )
-                mod.write(writer, rows)
-                rows_collected += len(rows)
-            except Exception as e:
-                errors.append(f"{mod.CATEGORY}: {e}")
-    except Exception as e:
-        errors.append(str(e))
+    writer = SheetsWriter(settings.google_creds_path, sheet_id)
+    for mod in ALL:
+        try:
+            rows = await mod.fetch(
+                kiro_url=settings.kiro_gateway_url,
+                kiro_key=settings.kiro_gateway_api_key,
+            )
+            mod.write(writer, rows)
+            rows_collected += len(rows)
+        except Exception as e:
+            errors.append(f"{mod.CATEGORY}: {e}")
 
     result = {
         "bot": bot_name,
