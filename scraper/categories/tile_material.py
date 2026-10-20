@@ -38,7 +38,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row):
     """
     For tile, price is already per m².
     So price_per_unit = price directly.
@@ -84,3 +84,40 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
 def write(writer: SheetsWriter, rows: list) -> None:
     """Write rows to the category worksheet, sorted by price_per_m2."""
     writer.write_category_sheet(WORKSHEET, HEADER, rows, to_row)
+
+
+def load_items(creds_path: str, sheet_id: str) -> list:
+    """
+    Read the Плитка worksheet and return CatalogItem objects.
+    box_m2 = m² per box, price is already грн/м².
+    """
+    from src.multibot.config.sections import CatalogItem
+    import gspread
+    result = []
+    try:
+        gc = gspread.service_account(filename=creds_path)
+        ws = gc.open_by_key(sheet_id).worksheet(WORKSHEET)
+        for row in ws.get_all_records():
+            if str(row.get("active", "true")).lower() not in ("true", "1", "так"):
+                continue
+            try:
+                price = float(str(row.get("price", "")).replace(",", "."))
+                box_m2_raw = row.get("box_m2", "")
+                box_m2 = float(str(box_m2_raw).replace(",", ".")) if box_m2_raw not in ("", None) else None
+                result.append(CatalogItem(
+                    category=CATEGORY,
+                    item=str(row.get("item", "")).strip(),
+                    price=price,
+                    unit=str(row.get("price_unit", "грн/м²")).strip(),
+                    source_name=str(row.get("source_name", "")).strip() or None,
+                    source_url=str(row.get("source_url", "")).strip() or None,
+                    collected_at=str(row.get("collected_at", "")).strip() or None,
+                    package_size=box_m2,
+                    package_unit="м²" if box_m2 else None,
+                ))
+            except Exception:
+                continue
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[{CATEGORY}] load_items failed: {e}")
+    return result

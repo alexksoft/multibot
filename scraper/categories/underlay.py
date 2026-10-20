@@ -44,7 +44,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row):
     """
     Normalize to грн per m².
     Case 1: price already per m² → use directly.
@@ -108,3 +108,48 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
 def write(writer: SheetsWriter, rows: list) -> None:
     """Write rows to the category worksheet, sorted by price_per_m2."""
     writer.write_category_sheet(WORKSHEET, HEADER, rows, to_row)
+
+
+def load_items(creds_path: str, sheet_id: str) -> list:
+    """
+    Read the Підкладка worksheet and return CatalogItem objects.
+    roll_m2 = m² per roll when available. weight_kg = roll weight.
+    Price can be грн/м² or грн per roll.
+    """
+    from src.multibot.config.sections import CatalogItem
+    import gspread
+    result = []
+    try:
+        gc = gspread.service_account(filename=creds_path)
+        ws = gc.open_by_key(sheet_id).worksheet(WORKSHEET)
+        for row in ws.get_all_records():
+            if str(row.get("active", "true")).lower() not in ("true", "1", "так"):
+                continue
+            try:
+                price = float(str(row.get("price", "")).replace(",", "."))
+                roll_m2_raw = row.get("roll_m2", "")
+                roll_m2 = float(str(roll_m2_raw).replace(",", ".")) if roll_m2_raw not in ("", None) else None
+                weight_kg_raw = row.get("weight_kg", "")
+                weight_kg = float(str(weight_kg_raw).replace(",", ".")) if weight_kg_raw not in ("", None) else None
+                # Use roll_m2 as package_size if available, else weight_kg
+                if roll_m2:
+                    pkg_size, pkg_unit = roll_m2, "м²"
+                else:
+                    pkg_size, pkg_unit = weight_kg, ("кг" if weight_kg else None)
+                result.append(CatalogItem(
+                    category=CATEGORY,
+                    item=str(row.get("item", "")).strip(),
+                    price=price,
+                    unit=str(row.get("price_unit", "грн")).strip(),
+                    source_name=str(row.get("source_name", "")).strip() or None,
+                    source_url=str(row.get("source_url", "")).strip() or None,
+                    collected_at=str(row.get("collected_at", "")).strip() or None,
+                    package_size=pkg_size,
+                    package_unit=pkg_unit,
+                ))
+            except Exception:
+                continue
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[{CATEGORY}] load_items failed: {e}")
+    return result
