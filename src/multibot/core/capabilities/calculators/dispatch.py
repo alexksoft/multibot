@@ -7,6 +7,8 @@
 #   1. Create a new file in this folder (e.g. new_category.py)
 #   2. Add it to the CATEGORY_MAP below
 
+import logging
+
 from . import (
     plaster, putty, primer, paint,
     tile_material, tile_glue, grout,
@@ -14,6 +16,8 @@ from . import (
     laminate, underlay,
     wallpaper, wallpaper_glue,
 )
+
+logger = logging.getLogger(__name__)
 
 # Maps the category label (exactly as in Google Sheet / building.yaml rule label)
 # to its calculator module
@@ -62,6 +66,7 @@ def dispatch(
 
     # --- Ґрунтовка / Фарба ---
     elif mod in (primer, paint):
+        logger.info(f"[dispatch] {category}: rule_unit={rule_unit!r} pkg_unit={pkg_unit!r} pkg_size={pkg_size} volume_l={volume_l} unit_price={unit_price}")
         if mod.can_calculate(rule_unit, pkg_unit, pkg_size):
             return mod.calculate(qty, unit_price, volume_l, pkg_size_kg=pkg_size)
 
