@@ -42,7 +42,7 @@ class MultiCategorySheetsCatalog:
             return self._cache
 
         # Each calculator module knows its own worksheet and columns
-        from ..capabilities.calculators import (
+        from .capabilities.calculators import (
             plaster, putty, primer, paint,
             tile_material, tile_glue, grout,
             screed, fiber,
@@ -63,9 +63,10 @@ class MultiCategorySheetsCatalog:
             try:
                 items = mod.load_items(self._creds_path, self._sheet_id)
                 all_items.extend(items)
-                logger.info(f"[catalog] {mod.CATEGORY}: {len(items)} items")
+                logger.info(f"[catalog] {mod.CATEGORY}: {len(items)} items loaded")
             except Exception as e:
-                logger.warning(f"[catalog] Failed to load {mod.CATEGORY}: {e}")
+                import traceback
+                logger.warning(f"[catalog] Failed to load {mod.CATEGORY}: {e}\n{traceback.format_exc()}")
 
         self._cache = all_items
         self._cache_time = now

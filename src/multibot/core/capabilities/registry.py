@@ -104,7 +104,9 @@ class ShoppingList:
             except (ValueError, TypeError):
                 qty = 0.0
 
-            item = await knowledge.cheapest_item(category)
+            tier = collected.get("price_tier", "")
+            item = await knowledge.tiered_item(category, tier)
+            logger.info(f"[shopping] category={category!r} rule_unit={rule_unit!r} qty={qty} item={'found: '+item.item[:30] if item else 'NOT FOUND'}")
             if not item:
                 lines.append(f"• {category}: {qty} {rule_unit} (ціна не знайдена в каталозі)")
                 shopping_results[rule_id] = {
@@ -128,6 +130,7 @@ class ShoppingList:
                     pass
 
             calc = dispatch(category, rule_unit, pkg_unit, price_unit, qty, pkg_size, unit_price, volume_l=item.volume_l)
+            logger.info(f"[shopping] dispatch result: category={category!r} pkg_size={pkg_size} pkg_unit={pkg_unit!r} price_unit={price_unit!r} unit_price={unit_price} -> {calc}")
             packages = calc["packages"]
             qty_display = calc["qty_display"]
             if calc["total_price"] is not None:
@@ -458,5 +461,6 @@ class CapabilityRegistry:
         try:
             return await cap.run(self._knowledge, self._rules, collected, params)
         except Exception as e:
-            logger.error(f"[capability] '{name}' error: {e}")
+            import traceback
+            logger.error(f"[capability] '{name}' error: {e}\n{traceback.format_exc()}")
             return CapabilityResult(False, "Помилка виконання функції.", error=str(e))
