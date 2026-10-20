@@ -88,7 +88,6 @@ class ShoppingList:
 
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
-        import math
         import re as _re
         calc_data = collected.get("_calc_results", {})
         lines = ["Список покупок:"]
@@ -115,9 +114,11 @@ class ShoppingList:
                 }
                 continue
 
-            # --- package rounding ---
+            # --- package calculation via dedicated calculator ---
+            from .calculators.dispatch import dispatch
             pkg_size = item.package_size
-            pkg_unit = item.package_unit
+            pkg_unit = item.package_unit or ""
+            price_unit = item.unit or ""
             unit_price = 0.0
             m = _re.match(r"([\d\s]+(?:[.,]\d+)?)", (knowledge.format_price(item) or "").replace("\xa0", " "))
             if m:
@@ -126,26 +127,11 @@ class ShoppingList:
                 except ValueError:
                     pass
 
-            # unit conversion: rule кг vs package г
-            qty_norm = qty
-            if pkg_unit and rule_unit:
-                if rule_unit == "кг" and pkg_unit == "г":
-                    qty_norm = qty * 1000
-                elif rule_unit == "г" and pkg_unit == "кг":
-                    qty_norm = qty / 1000
-                elif rule_unit == "л" and pkg_unit == "мл":
-                    qty_norm = qty * 1000
-                elif rule_unit == "мл" and pkg_unit == "л":
-                    qty_norm = qty / 1000
-
-            if pkg_size and pkg_size > 0:
-                packages = math.ceil(qty_norm / pkg_size)
-                qty_display = f"{packages} уп. × {pkg_size:g} {pkg_unit}"
-                total += unit_price * packages
-            else:
-                packages = None
-                qty_display = f"{qty:g} {rule_unit}"
-                total += unit_price * qty
+            calc = dispatch(rule_unit, pkg_unit, price_unit, qty, pkg_size, unit_price)
+            packages = calc["packages"]
+            qty_display = calc["qty_display"]
+            if calc["total_price"] is not None:
+                total += calc["total_price"]
 
             price_str = knowledge.format_price(item)
             url = item.source_url or ""
