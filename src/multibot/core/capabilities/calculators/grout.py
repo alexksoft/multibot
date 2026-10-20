@@ -27,7 +27,10 @@ def calculate(qty_kg: float, pkg_size_kg: float, price_per_pack: float) -> dict:
         qty_display  -- e.g. "3 уп. × 2 кг"
         total_price  -- total cost in грн
     """
-    packages = math.ceil(qty_kg / pkg_size_kg)
+    if not pkg_size_kg or pkg_size_kg <= 0:
+        return {"packages": None, "qty_display": f"{qty_kg:g} кг", "total_price": None}
+    qty_rounded = round(qty_kg, 6)
+    packages = math.ceil(qty_rounded / pkg_size_kg)
     qty_display = f"{packages} уп. × {pkg_size_kg:g} кг"
     total_price = price_per_pack * packages
     return {"packages": packages, "qty_display": qty_display, "total_price": total_price}

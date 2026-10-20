@@ -25,7 +25,7 @@ def calculate(qty_packets: float, price_per_packet: float) -> dict:
         qty_display  -- e.g. "2 пач"
         total_price  -- total cost in грн
     """
-    packages = math.ceil(qty_packets)
+    packages = math.ceil(round(qty_packets, 6))
     qty_display = f"{packages} пач"
     total_price = price_per_packet * packages
     return {"packages": packages, "qty_display": qty_display, "total_price": total_price}

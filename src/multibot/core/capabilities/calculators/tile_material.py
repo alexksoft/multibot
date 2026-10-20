@@ -31,9 +31,11 @@ def calculate(qty_m2: float, pkg_size_m2: float, price_per_m2: float) -> dict:
         qty_display  -- e.g. "16 уп. × 1.44 м²"
         total_price  -- total cost in грн (price_per_m² × total_m²)
     """
-    packages = math.ceil(qty_m2 / pkg_size_m2)
+    if not pkg_size_m2 or pkg_size_m2 <= 0:
+        return {"packages": None, "qty_display": f"{qty_m2:g} м²", "total_price": round(price_per_m2 * qty_m2, 2)}
+    qty_rounded = round(qty_m2, 6)
+    packages = math.ceil(qty_rounded / pkg_size_m2)
     qty_display = f"{packages} уп. × {pkg_size_m2:g} м²"
-    # Price is per m², so multiply by m² — NOT by number of boxes
     total_price = price_per_m2 * qty_m2
     return {"packages": packages, "qty_display": qty_display, "total_price": total_price}
 

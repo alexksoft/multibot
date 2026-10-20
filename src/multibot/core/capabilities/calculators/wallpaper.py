@@ -26,8 +26,7 @@ def calculate(qty_rolls: float, price_per_roll: float) -> dict:
         qty_display  -- e.g. "10 рул"
         total_price  -- total cost in грн
     """
-    # The rule already rounds up, but ceil again just to be safe
-    packages = math.ceil(qty_rolls)
+    packages = math.ceil(round(qty_rolls, 6))
     qty_display = f"{packages} рул"
     total_price = price_per_roll * packages
     return {"packages": packages, "qty_display": qty_display, "total_price": total_price}
