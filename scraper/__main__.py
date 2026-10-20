@@ -55,10 +55,6 @@ ALL_CATEGORIES = [
     wallpaper_glue,
 ]
 
-# Google Sheet worksheet name
-WORKSHEET = "building_assistant_prices"
-
-
 async def run(category_names: list[str], sheet_id: str, creds_path: str,
               kiro_url: str, kiro_key: str) -> None:
     """
@@ -97,17 +93,28 @@ async def run(category_names: list[str], sheet_id: str, creds_path: str,
         except Exception as e:
             logger.error(f"[scraper] {mod.CATEGORY} failed: {e}")
 
-    # Write everything to Google Sheet
+    # Write each category to its own worksheet
     if all_rows:
-        logger.info(f"[scraper] Writing {len(all_rows)} total rows to sheet...")
-        try:
-            writer = SheetsWriter(creds_path, sheet_id)
-            writer.recreate(WORKSHEET, all_rows)
-            logger.info(f"[scraper] Done — {len(all_rows)} rows written")
-        except Exception as e:
-            logger.error(f"[scraper] Sheet write failed: {e}")
+        logger.info(f"[scraper] Writing {len(all_rows)} total rows to individual category sheets...")
+        # Group rows by category module
+        rows_by_module = {}
+        for mod in modules_to_run:
+            rows_by_module[mod.CATEGORY] = []
+        for row in all_rows:
+            if row.category in rows_by_module:
+                rows_by_module[row.category].append(row)
+
+        writer = SheetsWriter(creds_path, sheet_id)
+        for mod in modules_to_run:
+            cat_rows = rows_by_module.get(mod.CATEGORY, [])
+            if cat_rows:
+                try:
+                    mod.write(writer, cat_rows)
+                    logger.info(f"[scraper] {mod.CATEGORY}: wrote {len(cat_rows)} rows")
+                except Exception as e:
+                    logger.error(f"[scraper] {mod.CATEGORY} sheet write failed: {e}")
     else:
-        logger.warning("[scraper] No rows collected — sheet not updated")
+        logger.warning("[scraper] No rows collected — sheets not updated")
 
 
 def main() -> None:
