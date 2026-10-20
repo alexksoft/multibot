@@ -63,7 +63,7 @@ def dispatch(
     # --- Ґрунтовка / Фарба ---
     elif mod in (primer, paint):
         if mod.can_calculate(rule_unit, pkg_unit, pkg_size):
-            return mod.calculate(qty, unit_price, volume_l)
+            return mod.calculate(qty, unit_price, volume_l, pkg_size_kg=pkg_size)
 
     # --- Плитка ---
     elif mod is tile_material:
