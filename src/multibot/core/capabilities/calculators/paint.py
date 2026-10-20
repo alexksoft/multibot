@@ -13,14 +13,20 @@ CATEGORY = "Фарба"
 
 
 def calculate(qty_l: float, price_per_can: float, volume_l_per_can: float = None,
-              pkg_unit: str = "л") -> dict:
+              pkg_unit: str = "л", pkg_size_kg: float = None) -> dict:
     """
-    If volume_l_per_can is known: packages = ceil(qty_l / volume_l_per_can).
-    Otherwise: show raw litres, no total.
+    If volume_l is known — use it (display in л).
+    Else if pkg_size_kg is known — use weight in кг as package size.
+    Otherwise show raw litres.
     """
-    if volume_l_per_can and volume_l_per_can > 0:
-        packages = math.ceil(round(qty_l / volume_l_per_can, 6))
-        qty_display = f"{packages} уп. × {volume_l_per_can:g} {pkg_unit}"
+    vol = volume_l_per_can
+    unit = pkg_unit or "л"
+    if not vol and pkg_size_kg:
+        vol = pkg_size_kg
+        unit = "кг"
+    if vol and vol > 0:
+        packages = math.ceil(round(qty_l / vol, 6))
+        qty_display = f"{packages} уп. × {vol:g} {unit}"
         total_price = price_per_can * packages
     else:
         packages = None
