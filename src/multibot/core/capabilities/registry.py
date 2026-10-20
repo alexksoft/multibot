@@ -104,7 +104,8 @@ class ShoppingList:
             except (ValueError, TypeError):
                 qty = 0.0
 
-            item = await knowledge.cheapest_item(category)
+            tier = collected.get("price_tier", "")
+            item = await knowledge.tiered_item(category, tier)
             logger.info(f"[shopping] category={category!r} rule_unit={rule_unit!r} qty={qty} item={'found: '+item.item[:30] if item else 'NOT FOUND'}")
             if not item:
                 lines.append(f"• {category}: {qty} {rule_unit} (ціна не знайдена в каталозі)")

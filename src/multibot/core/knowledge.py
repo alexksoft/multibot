@@ -44,6 +44,32 @@ class KnowledgeBase:
             return items[0] if items else None
         return random.choice(with_price)
 
+    async def tiered_item(self, category: str, tier: str) -> CatalogItem | None:
+        """Return a random item based on price tier.
+
+        ekon   — random from cheapest 10
+        middle — random from middle 5 of 10 (positions 3-7 of sorted list)
+        premium — random from most expensive 10
+        """
+        import random
+        items = await self.list_items(category)
+        with_price = sorted(
+            [i for i in items if i.price is not None and i.price > 0],
+            key=lambda i: i.price,
+        )
+        if not with_price:
+            return items[0] if items else None
+        t = (tier or "").lower()
+        if t in ("преміум", "premium"):
+            pool = with_price[-10:]
+        elif t in ("середній", "middle", "medium"):
+            n = len(with_price)
+            mid = n // 2
+            pool = with_price[max(0, mid - 2): mid + 3]  # up to 5 around median
+        else:  # економ / default
+            pool = with_price[:10]
+        return random.choice(pool)
+
     async def find_item(self, category: str, item_name: str) -> CatalogItem | None:
         items = await self.list_items(category)
         name_lower = item_name.lower()

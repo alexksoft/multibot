@@ -31,6 +31,13 @@ conversation_flows:
           question_type: choice
           options: ["Штукатурка", "Шпаклівка", "Фарбування", "Плитка", "Стяжка підлоги", "Ламінат", "Поклейка шпалер"]
           save_as: work
+          next: ask_price_tier
+        - id: ask_price_tier
+          kind: question
+          text: "Який ціновий сегмент матеріалів?"
+          question_type: choice
+          options: ["Економ", "Середній", "Преміум"]
+          save_as: price_tier
           next: ask_room
         - id: ask_room
           kind: question
