@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-import uuid
+import re as _re
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -37,7 +37,6 @@ class CalculateMaterials:
         all_rules = params.get("_rules", [])
         work_rules_map: dict = params.get("_work_rules", {})
         norms = knowledge.get_norms()
-        # Filter rules by work type if mapping exists
         work = collected.get("work", "").lower()
         if work and work_rules_map:
             allowed_ids = work_rules_map.get(work, [])
@@ -46,10 +45,8 @@ class CalculateMaterials:
         results = rules.compute(all_rules, collected, norms)
         if not results:
             return CapabilityResult(False, "Не вдалося розрахувати матеріали. Перевірте введені дані.", error="no results")
-        skip = ShoppingList._SKIP_RULES
-        lines = [f"• {v['label']}: {v['value']} {v['unit']}" for k, v in results.items()
-                 if k not in skip and not k.endswith("_area") and not k.endswith("_perimeter")]
-        return CapabilityResult(True, "\ud83d\udcd0 \u0420\u043e\u0437\u0440\u0430\u0445\u0443\u043d\u043e\u043a \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0456\u0432:\n" + "\n".join(lines), data=results)
+        # Store data silently — PrepareRequest will render everything
+        return CapabilityResult(True, "", data=results)
 
 
 class SearchProducts:
@@ -83,14 +80,11 @@ class SearchProducts:
 class ShoppingList:
     name = "shopping_list"
 
-    # Rule IDs that are intermediate calculations, not purchasable materials
     _SKIP_RULES = {"wall_area", "floor_area", "ceiling_area", "perimeter"}
 
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
-        import re as _re
         calc_data = collected.get("_calc_results", {})
-        lines = ["Список покупок:"]
         shopping_results = {}
         total = 0.0
 
@@ -108,15 +102,14 @@ class ShoppingList:
             item = await knowledge.tiered_item(category, tier)
             logger.info(f"[shopping] category={category!r} rule_unit={rule_unit!r} qty={qty} item={'found: '+item.item[:30] if item else 'NOT FOUND'}")
             if not item:
-                lines.append(f"• {category}: {qty} {rule_unit} (ціна не знайдена в каталозі)")
                 shopping_results[rule_id] = {
                     "label": category, "qty": qty, "unit": rule_unit,
                     "qty_display": f"{qty} {rule_unit}",
                     "price_str": "—", "item_name": "", "source_url": "",
+                    "source_name": "", "collected_at": "",
                 }
                 continue
 
-            # --- package calculation via dedicated calculator ---
             from .calculators.dispatch import dispatch
             pkg_size = item.package_size
             pkg_unit = item.package_unit or ""
@@ -130,17 +123,13 @@ class ShoppingList:
                     pass
 
             calc = dispatch(category, rule_unit, pkg_unit, price_unit, qty, pkg_size, unit_price, volume_l=item.volume_l)
-            logger.info(f"[shopping] dispatch result: category={category!r} pkg_size={pkg_size} pkg_unit={pkg_unit!r} price_unit={price_unit!r} unit_price={unit_price} -> {calc}")
+            logger.info(f"[shopping] dispatch result: category={category!r} pkg_size={pkg_size} pkg_unit={pkg_unit!r} unit_price={unit_price} -> {calc}")
             packages = calc["packages"]
             qty_display = calc["qty_display"]
             if calc["total_price"] is not None:
                 total += calc["total_price"]
 
             price_str = knowledge.format_price(item)
-            url = item.source_url or ""
-            name = item.item[:60]
-            linked = f'<a href="{url}">{name}</a>' if url else name
-            lines.append(f"• {category}: {qty_display}\n  {linked} — {price_str}")
             shopping_results[rule_id] = {
                 "label": category, "qty": qty, "unit": rule_unit,
                 "qty_display": qty_display,
@@ -148,19 +137,22 @@ class ShoppingList:
                 "pkg_size": pkg_size, "pkg_unit": pkg_unit,
                 "price_str": price_str,
                 "item_name": item.item,
-                "source_url": url,
+                "source_url": item.source_url or "",
+                "source_name": item.source_name or "",
+                "collected_at": item.collected_at or "",
+                "unit_price": unit_price,
             }
 
-        if len(lines) == 1:
+        if not shopping_results:
             return CapabilityResult(False, "Спочатку виконайте розрахунок матеріалів.", error="no_calc")
 
         if total > 0:
             total_str = f"{int(total):,}".replace(",", " ")
-            lines.append(f"\nРазом орієнтовно: {total_str} грн")
             shopping_results["_total"] = total_str
 
         collected["_shopping_results"] = shopping_results
-        return CapabilityResult(True, "\n".join(lines), data=shopping_results)
+        # Store data silently — PrepareRequest will render everything
+        return CapabilityResult(True, "", data=shopping_results)
 
 
 class Checklist:
@@ -226,10 +218,15 @@ class CompareOptions:
         return CapabilityResult(True, "\n".join(lines))
 
 
-# Human-readable labels for collected keys
+_TIER_LABELS = {
+    "економ":   "💰 Економ",
+    "середній": "⭐ Середній",
+    "преміум":  "💎 Преміум",
+}
+
 _FIELD_LABELS = {
-    "work": "Вид робіт",
-    "room": "Розміри кімнати",
+    "work":   "Вид робіт",
+    "room":   "Розміри кімнати",
     "height": "Висота стін (м)",
 }
 
@@ -239,48 +236,92 @@ class PrepareRequest:
 
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
-        calc = collected.get("_calc_results", {})
+        calc     = collected.get("_calc_results", {})
         shopping = collected.get("_shopping_results", {})
 
-        # Build text summary
-        lines = ["📄 Ваш розрахунок матеріалів:"]
-        for key, val in collected.items():
-            if key.startswith("_"):
-                continue
-            label = _FIELD_LABELS.get(key, key)
-            lines.append(f"• {label}: {val}")
+        work   = collected.get("work", "")
+        room   = collected.get("room", "")
+        height = collected.get("height", "")
+        tier   = (collected.get("price_tier") or "").lower()
+        tier_label = _TIER_LABELS.get(tier, tier.capitalize())
+
+        lines = []
+
+        # ── Header ──────────────────────────────────────────────────────────
+        lines.append(f"🎨 {work}")
+        if room and height:
+            lines.append(f"📏 Кімната {room} м, висота стін {height} м")
+        if tier_label:
+            lines.append(f"Клас: {tier_label}")
+
+        # ── Quantities ───────────────────────────────────────────────────────
         if calc:
-            lines.append("\n\U0001f4d0 \u041a\u0456\u043b\u044c\u043a\u0456\u0441\u0442\u044c \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0456\u0432:")
+            lines.append("")
+            lines.append("📐 Скільки потрібно")
             skip = ShoppingList._SKIP_RULES
             for rule_id, info in calc.items():
                 if rule_id in skip or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
                     continue
-                lines.append(f"  {info['label']}: {info['value']} {info['unit']}")
+                lines.append(f"• {info['label']}: {info['value']} {info['unit']}")
+
+        # ── Shopping list ────────────────────────────────────────────────────
         if shopping:
-            lines.append("\nЦіни з Епіцентру:")
-            for key, entry in shopping.items():
-                if key == "_total" or not isinstance(entry, dict):
-                    continue
-                price = entry.get("price_str") or "ціна не знайдена"
-                item_name = entry.get("item_name", "")
-                url = entry.get("source_url", "")
-                if item_name and url:
-                    linked = f'<a href="{url}">{item_name[:60]}</a>'
-                elif item_name:
-                    linked = item_name[:60]
-                else:
-                    linked = ""
-                qty_str = entry.get("qty_display") or f"{entry.get('qty','')} {entry.get('unit','')}".strip()
-                line = f"  {entry['label']}: {qty_str}"
+            lines.append("")
+            lines.append("🛒 Що купити")
+            sources, dates = set(), set()
+            items_list = [(k, v) for k, v in shopping.items() if k != "_total" and isinstance(v, dict)]
+            for idx, (key, entry) in enumerate(items_list, 1):
+                item_name   = entry.get("item_name", "")
+                url         = entry.get("source_url", "")
+                qty_display = entry.get("qty_display", "")
+                price_str   = entry.get("price_str") or "—"
+                packages    = entry.get("packages")
+                unit_price  = entry.get("unit_price", 0.0)
+                if entry.get("source_name"):
+                    sources.add(entry["source_name"])
+                if entry.get("collected_at"):
+                    dates.add(entry["collected_at"])
+
+                linked = f'<a href="{url}">{item_name}</a>' if url else item_name
+                lines.append("")
+                lines.append(f"{idx}️⃣ {entry['label']}")
                 if linked:
-                    line += f"\n  {linked} — {price}"
+                    lines.append(linked)
+                if packages and unit_price:
+                    row = f"{packages} уп. × {unit_price:,.2f} грн = {packages * unit_price:,.2f} грн"
+                    lines.append(row.replace(",", "\u00a0"))
                 else:
-                    line += f" — {price}"
-                lines.append(line)
+                    lines.append(f"{qty_display} — {price_str}")
+
+        # ── Total ────────────────────────────────────────────────────────────
+        RESERVE_PCT = params.get("reserve_pct", 10)
         total_str = shopping.get("_total", "")
         if total_str:
-            lines.append(f"\nРазом орієнтовно: {total_str} грн")
-        lines.append("\n💡 Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.")
+            try:
+                total_val = float(total_str.replace("\u00a0", "").replace(" ", ""))
+                reserve_val = total_val * RESERVE_PCT / 100
+                grand_val = total_val + reserve_val
+                total_fmt   = f"{int(total_val):,}".replace(",", "\u00a0")
+                reserve_fmt = f"{int(reserve_val):,}".replace(",", "\u00a0")
+                grand_fmt   = f"{int(grand_val):,}".replace(",", "\u00a0")
+                lines.append("")
+                lines.append(f"\U0001f9fe \u0422\u043e\u0432\u0430\u0440\u0438: {total_fmt} \u0433\u0440\u043d")
+                lines.append(f"\u2795 \u0417\u0430\u043f\u0430\u0441 {RESERVE_PCT}% (\u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0430, \u0434\u0440\u0456\u0431\u043d\u0438\u0446\u0456, \u043d\u0435\u043f\u0435\u0440\u0435\u0434\u0431\u0430\u0447\u0435\u043d\u0435): {reserve_fmt} \u0433\u0440\u043d")
+                lines.append("")
+                lines.append(f"\U0001f4b0 \u0420\u0430\u0437\u043e\u043c \u2248 {grand_fmt} \u0433\u0440\u043d")
+            except ValueError:
+                lines.append("")
+                lines.append(f"\U0001f4b0 \u0420\u0430\u0437\u043e\u043c \u2248 {total_str} \u0433\u0440\u043d")
+
+        # ── Source & note ────────────────────────────────────────────────────
+        if shopping:
+            src_str  = ", ".join(sorted(sources))
+            date_str = ", ".join(sorted(dates))
+            if src_str:
+                lines.append(f"🏪 Ціни: {src_str}{', ' + date_str if date_str else ''}")
+
+        lines.append("")
+        lines.append("💡 Це середні ринкові ціни. Покажіть їх будівельникам при обговоренні ціни.")
         text = "\n".join(lines)
 
         # Generate PDF
@@ -292,22 +333,22 @@ class PrepareRequest:
 
 
 def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
+    RESERVE_PCT = 10
     try:
         from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import cm
         from reportlab.lib import colors
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
-        import io, os
+        import io, os, math
 
         buf = io.BytesIO()
         doc = SimpleDocTemplate(buf, pagesize=A4,
                                 leftMargin=2*cm, rightMargin=2*cm,
                                 topMargin=2*cm, bottomMargin=2*cm)
 
-        # Try to register a Unicode font for Cyrillic; fall back to built-in
         font_name = "Helvetica"
         for path in ["/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
                      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -321,106 +362,185 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                     pass
                 break
 
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle("title", fontName=font_name, fontSize=16,
-                                     spaceAfter=12, textColor=colors.HexColor("#1a1a2e"))
-        h2_style = ParagraphStyle("h2", fontName=font_name, fontSize=12,
-                                  spaceBefore=12, spaceAfter=6,
-                                  textColor=colors.HexColor("#16213e"))
-        body_style = ParagraphStyle("body", fontName=font_name, fontSize=10, spaceAfter=4)
-        note_style = ParagraphStyle("note", fontName=font_name, fontSize=9,
-                                    textColor=colors.grey, spaceAfter=4)
+        def P(text, **kw):
+            style = ParagraphStyle("s", fontName=font_name, fontSize=10, **kw)
+            return Paragraph(text, style)
+
+        def fmt(val):
+            return f"{val:,.0f}".replace(",", "\u00a0")
+
+        title_s  = ParagraphStyle("t",  fontName=font_name, fontSize=15, spaceAfter=4,  textColor=colors.HexColor("#1a1a2e"))
+        sub_s    = ParagraphStyle("sb", fontName=font_name, fontSize=10, spaceAfter=10, textColor=colors.HexColor("#444444"))
+        h2_s     = ParagraphStyle("h2", fontName=font_name, fontSize=11, spaceBefore=10, spaceAfter=4, textColor=colors.HexColor("#16213e"))
+        body_s   = ParagraphStyle("b",  fontName=font_name, fontSize=10, spaceAfter=3)
+        link_s   = ParagraphStyle("l",  fontName=font_name, fontSize=9,  leading=13, textColor=colors.HexColor("#0645AD"))
+        note_s   = ParagraphStyle("n",  fontName=font_name, fontSize=9,  textColor=colors.grey)
+        right_s  = ParagraphStyle("r",  fontName=font_name, fontSize=10, alignment=2)
+        bold_r_s = ParagraphStyle("br", fontName=font_name, fontSize=10, alignment=2)
+
+        work   = collected.get("work", "")
+        room   = collected.get("room", "")
+        height = collected.get("height", "")
+        tier   = (collected.get("price_tier") or "").lower()
+        tier_labels = {"економ": "Економ", "середній": "Середній", "преміум": "Преміум"}
+        tier_label = tier_labels.get(tier, tier.capitalize())
+
+        subtitle_parts = [p for p in [
+            work,
+            f"Кімната {room}\u00a0м" if room else "",
+            f"висота стін {height}\u00a0м" if height else "",
+            f"Клас: {tier_label}" if tier_label else "",
+        ] if p]
 
         story = []
-        story.append(Paragraph("Розрахунок матеріалів для ремонту", title_style))
+        story.append(Paragraph("Розрахунок матеріалів для ремонту", title_s))
+        story.append(Paragraph(" \u00b7 ".join(subtitle_parts), sub_s))
 
-        # Parameters section
-        story.append(Paragraph("Параметри", h2_style))
-        for key, val in collected.items():
-            if not key.startswith("_"):
-                label = _FIELD_LABELS.get(key, key)
-                story.append(Paragraph(f"{label}: {val}", body_style))
-
-        # Materials section
+        # ── Quantities ───────────────────────────────────────────────────────
         if calc:
-            story.append(Spacer(1, 0.3*cm))
-            story.append(Paragraph("Кількість матеріалів", h2_style))
-            table_data = [["\u041c\u0430\u0442\u0435\u0440\u0456\u0430\u043b", "\u041a\u0456\u043b\u044c\u043a\u0456\u0441\u0442\u044c", "\u041e\u0434\u0438\u043d\u0438\u0446\u044f"]]
+            story.append(Paragraph("Скільки потрібно", h2_s))
             skip = ShoppingList._SKIP_RULES
+            qty_rows = []
             for rule_id, info in calc.items():
                 if rule_id in skip or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
                     continue
-                table_data.append([info["label"], str(info["value"]), info["unit"]])
-            t = Table(table_data, colWidths=[9*cm, 4*cm, 3*cm])
-            t.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f4f8")),
-                ("FONTNAME", (0, 0), (-1, -1), font_name),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9f9f9")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ]))
-            story.append(t)
+                qty_rows.append([info["label"], f"{info['value']} {info['unit']}"])
+            if qty_rows:
+                t = Table(qty_rows, colWidths=[10*cm, 6*cm])
+                t.setStyle(TableStyle([
+                    ("FONTNAME",     (0, 0), (-1, -1), font_name),
+                    ("FONTSIZE",     (0, 0), (-1, -1), 10),
+                    ("BOTTOMPADDING",(0, 0), (-1, -1), 3),
+                    ("TOPPADDING",   (0, 0), (-1, -1), 3),
+                    ("LINEBELOW",    (0, 0), (-1, -1), 0.3, colors.lightgrey),
+                ]))
+                story.append(t)
 
-        # Prices section
+        # ── Shopping table ───────────────────────────────────────────────────
         if shopping:
             story.append(Spacer(1, 0.3*cm))
-            story.append(Paragraph("Ціни з Епіцентру", h2_style))
-            link_style = ParagraphStyle("link", fontName=font_name, fontSize=9,
-                                          textColor=colors.HexColor("#0645AD"), leading=12)
-            table_data = [["Матеріал / Товар", "К-сть", "Ціна"]]
-            for key, entry in shopping.items():
-                if key == "_total" or not isinstance(entry, dict):
-                    continue
-                item_name = entry.get("item_name", "")
-                url = entry.get("source_url", "")
-                qty_str = entry.get("qty_display") or f"{entry.get('qty','')} {entry.get('unit','')}".strip()
-                # Category label bold + item name as link below
+            story.append(Paragraph("Список покупок", h2_s))
+
+            HDR_BG  = colors.HexColor("#dce8f0")
+            ROW_BG1 = colors.white
+            ROW_BG2 = colors.HexColor("#f5f9fc")
+            NOTE_FG = colors.HexColor("#666666")
+
+            header = [
+                Paragraph("<b>Товар</b>",        link_s),
+                Paragraph("<b>Кількість</b>",   link_s),
+                Paragraph("<b>Ціна за уп.</b>", link_s),
+                Paragraph("<b>Сума</b>",         link_s),
+            ]
+            table_data = [header]
+            table_styles = [
+                ("BACKGROUND",   (0, 0), (-1, 0),  HDR_BG),
+                ("FONTNAME",     (0, 0), (-1, -1), font_name),
+                ("FONTSIZE",     (0, 0), (-1, -1), 9),
+                ("GRID",         (0, 0), (-1, -1), 0.4, colors.HexColor("#c0d0dc")),
+                ("TOPPADDING",   (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING",(0, 0), (-1, -1), 4),
+                ("VALIGN",       (0, 0), (-1, -1), "TOP"),
+            ]
+
+            items_list = [(k, v) for k, v in shopping.items() if k != "_total" and isinstance(v, dict)]
+            sources, dates = set(), set()
+
+            for row_idx, (key, entry) in enumerate(items_list, 1):
+                item_name  = entry.get("item_name", "")
+                url        = entry.get("source_url", "")
+                qty_display = entry.get("qty_display", "")
+                unit_price = entry.get("unit_price", 0.0)
+                packages   = entry.get("packages")
+                pkg_size   = entry.get("pkg_size")
+                pkg_unit   = entry.get("pkg_unit", "")
+                qty_needed = entry.get("qty", 0.0)
+                if entry.get("source_name"): sources.add(entry["source_name"])
+                if entry.get("collected_at"): dates.add(entry["collected_at"])
+
+                # item cell: bold label + linked name
                 if item_name and url:
-                    cell = Paragraph(
+                    item_cell = Paragraph(
                         f"<b>{entry['label']}</b><br/>"
-                        f'<link href="{url}" color="#0645AD">{item_name[:55]}</link>',
-                        link_style
+                        f'<link href="{url}" color="#0645AD">{item_name}</link>',
+                        link_s
                     )
                 elif item_name:
-                    cell = Paragraph(f"<b>{entry['label']}</b><br/>{item_name[:55]}", link_style)
+                    item_cell = Paragraph(f"<b>{entry['label']}</b><br/>{item_name}", link_s)
                 else:
-                    cell = Paragraph(f"<b>{entry['label']}</b>", link_style)
-                table_data.append([cell, qty_str, entry.get("price_str") or "—"])
-            t = Table(table_data, colWidths=[10*cm, 3*cm, 4*cm])
-            t.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f4f8")),
-                ("FONTNAME", (0, 0), (-1, -1), font_name),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9f9f9")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ]))
-            # Total row
+                    item_cell = Paragraph(f"<b>{entry['label']}</b>", link_s)
+
+                price_cell = Paragraph(f"{fmt(unit_price)} грн" if unit_price else "—", body_s)
+
+                if packages and unit_price:
+                    row_total = packages * unit_price
+                    sum_cell  = Paragraph(f"<b>{fmt(row_total)} грн</b>", body_s)
+                else:
+                    row_total = None
+                    sum_cell  = Paragraph("—", body_s)
+
+                bg = ROW_BG1 if row_idx % 2 == 1 else ROW_BG2
+                data_row_idx = row_idx  # 1-based, header is 0
+                table_styles.append(("BACKGROUND", (0, data_row_idx), (-1, data_row_idx), bg))
+
+                table_data.append([item_cell, qty_display, price_cell, sum_cell])
+
+                # remainder row
+                if packages and pkg_size and qty_needed:
+                    bought = packages * pkg_size
+                    remainder = bought - qty_needed
+                    if remainder > 0.01:
+                        rem_text = f"Залишиться \u2248 {remainder:g} {pkg_unit or entry.get('unit','')}"
+                        rem_row_idx = len(table_data)
+                        table_data.append([
+                            Paragraph(f"<i>{rem_text}</i>",
+                                      ParagraphStyle("rem", fontName=font_name, fontSize=8, textColor=NOTE_FG)),
+                            "", "", ""
+                        ])
+                        table_styles.append(("BACKGROUND", (0, rem_row_idx), (-1, rem_row_idx), bg))
+                        table_styles.append(("SPAN", (0, rem_row_idx), (-1, rem_row_idx)))
+
+            t = Table(table_data, colWidths=[8*cm, 3*cm, 2.5*cm, 2.5*cm])
+            t.setStyle(TableStyle(table_styles))
+            story.append(t)
+
+            # ── Totals block ─────────────────────────────────────────────────
             total_str = shopping.get("_total", "")
             if total_str:
-                t2 = Table(
-                    [[Paragraph("<b>Разом орієнтовно:</b>", link_style), "", f"{total_str} грн"]],
-                    colWidths=[10*cm, 3*cm, 4*cm]
-                )
-                t2.setStyle(TableStyle([
-                    ("FONTNAME", (0, 0), (-1, -1), font_name),
-                    ("FONTSIZE", (0, 0), (-1, -1), 10),
-                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#e8f4f8")),
-                    ("TOPPADDING", (0, 0), (-1, -1), 6),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                    ("SPAN", (0, 0), (1, 0)),
-                ]))
-            story.append(t)
-            if total_str:
-                story.append(t2)
+                try:
+                    total_val   = float(total_str.replace("\u00a0", "").replace(" ", ""))
+                    reserve_val = total_val * RESERVE_PCT / 100
+                    grand_val   = total_val + reserve_val
+                    totals_data = [
+                        ["", "", Paragraph("Товари:",                                                    body_s), Paragraph(f"{fmt(total_val)} грн",   body_s)],
+                        ["", "", Paragraph(f"Запас {RESERVE_PCT}% (доставка, дрібниці):",  body_s), Paragraph(f"{fmt(reserve_val)} грн", body_s)],
+                        ["", "", Paragraph("<b>РАЗОМ \u2248</b>",                                          link_s), Paragraph(f"<b>{fmt(grand_val)} грн</b>",  link_s)],
+                    ]
+                    t2 = Table(totals_data, colWidths=[8*cm, 3*cm, 2.5*cm, 2.5*cm])
+                    t2.setStyle(TableStyle([
+                        ("FONTNAME",     (0, 0), (-1, -1), font_name),
+                        ("FONTSIZE",     (0, 0), (-1, -1), 10),
+                        ("TOPPADDING",   (0, 0), (-1, -1), 3),
+                        ("BOTTOMPADDING",(0, 0), (-1, -1), 3),
+                        ("LINEABOVE",    (2, 0), (-1, 0),  0.5, colors.HexColor("#aaaaaa")),
+                        ("LINEABOVE",    (2, 2), (-1, 2),  1.0, colors.HexColor("#333333")),
+                        ("BACKGROUND",   (2, 2), (-1, 2),  colors.HexColor("#dce8f0")),
+                    ]))
+                    story.append(t2)
+                except ValueError:
+                    pass
 
-        story.append(Spacer(1, 0.5*cm))
+            # source line
+            src_str  = ", ".join(sorted(sources))
+            date_str = ", ".join(sorted(dates))
+            if src_str:
+                story.append(Spacer(1, 0.2*cm))
+                story.append(Paragraph(f"Ціни: {src_str}{', ' + date_str if date_str else ''}.", note_s))
+
+        story.append(Spacer(1, 0.4*cm))
         story.append(Paragraph(
-            "Ці цифри — середні по ринку. Покажіть їх будівельникам при обговоренні ціни.",
-            note_style
+            "Це середні ринкові ціни. Покажіть їх будівельникам при обговоренні ціни.",
+            note_s
         ))
 
         doc.build(story)
@@ -443,7 +563,7 @@ class CapabilityRegistry:
         self._caps = {c.name: c for c in _ALL_CAPABILITIES}
         self._knowledge = knowledge
         self._rules = rules
-        self._knowledge_config = knowledge_config  # for passing calc rules
+        self._knowledge_config = knowledge_config
 
     def is_allowed(self, name: str) -> bool:
         return name in self._enabled

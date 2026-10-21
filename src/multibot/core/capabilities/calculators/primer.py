@@ -19,11 +19,15 @@ def calculate(qty_l: float, price_per_can: float, volume_l_per_can: float = None
         packages = math.ceil(round(qty_l / volume_l_per_can, 6))
         qty_display = f"{packages} уп. × {volume_l_per_can:g} л"
         total_price = price_per_can * packages
+    elif pkg_size_kg and pkg_size_kg > 0:
+        packages = math.ceil(round(qty_l / pkg_size_kg, 6))
+        qty_display = f"{packages} уп. × {pkg_size_kg:g} кг"
+        total_price = price_per_can * packages
     else:
         packages = None
         qty_display = f"{qty_l:g} л"
         total_price = None
-    logger.info(f"[primer.calculate] result: {qty_display}")
+    logger.info(f"[primer.calculate] result: {qty_display} total={total_price}")
     return {"packages": packages, "qty_display": qty_display, "total_price": total_price}
 
 
