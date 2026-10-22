@@ -16,6 +16,7 @@ echo [1/3] Copying files...
 %SCP% src         %REMOTE%/
 %SCP% bots        %REMOTE%/
 %SCP% admin       %REMOTE%/
+%SCP% data        %REMOTE%/
 %SCP% scraper\base.py          %SERVER%:/home/opc/marketing_multibot_telegram/scraper/base.py
 %SCP% scraper\http_scraper.py  %SERVER%:/home/opc/marketing_multibot_telegram/scraper/http_scraper.py
 %SCP% scraper\__init__.py      %SERVER%:/home/opc/marketing_multibot_telegram/scraper/__init__.py
@@ -27,8 +28,9 @@ echo [1/3] Copying files...
 %SCP% requirements.txt %SERVER%:/home/opc/marketing_multibot_telegram/requirements.txt
 
 echo.
-echo [2/3] Installing dependencies...
+echo [2/3] Installing dependencies and building vector index...
 %SSH% "cd /home/opc/marketing_multibot_telegram && .venv/bin/pip install -r requirements.txt -q"
+%SSH% "cd /home/opc/marketing_multibot_telegram && .venv/bin/python data/building_bot/build_vector_kb.py"
 
 echo.
 echo [3/3] Restarting services...

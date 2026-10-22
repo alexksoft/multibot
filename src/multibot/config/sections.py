@@ -164,6 +164,7 @@ class AIPolicy(BaseModel):
     max_tokens: int = 600
     forbidden_advice: list[str] = []
     clarify_when_unsure: bool = True
+    fallback_message: str = "Уточніть питання."
 
 
 # ── Section 6: Integrations ───────────────────────────────────────────────────

@@ -1,9 +1,11 @@
 from __future__ import annotations
 import logging
 import re
+from typing import Optional
 
 from ..config.sections import CatalogItem, FAQItem, KnowledgeData
 from .catalog import CatalogProvider
+from .vector_faq import VectorFAQ
 
 logger = logging.getLogger(__name__)
 
@@ -12,14 +14,30 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower().strip())
 
 
+class _VectorAnswer:
+    """Thin wrapper so vector answers look like FAQItem to callers."""
+    def __init__(self, answer: str):
+        self.answer = answer
+
+
 class KnowledgeBase:
-    def __init__(self, knowledge: KnowledgeData, catalog_provider: CatalogProvider):
+    def __init__(self, knowledge: KnowledgeData, catalog_provider: CatalogProvider,
+                 vector_faq: Optional[VectorFAQ] = None):
         self._faq = knowledge.faq
         self._norms = knowledge.norms
         self._catalog = catalog_provider
+        self._vector_faq = vector_faq
 
-    def match_faq(self, text: str) -> FAQItem | None:
-        """Return best FAQ match by keyword overlap."""
+    def match_faq(self, text: str):
+        """Return best FAQ match — vector DB first, keyword fallback."""
+        # 1. vector search (fast, semantic)
+        if self._vector_faq is not None:
+            answer = self._vector_faq.match(text)
+            if answer:
+                logger.info("[faq] VECTOR match | q=%r | a=%s", text[:60], answer[:80].replace('\n', ' '))
+                return _VectorAnswer(answer)
+
+        # 2. keyword fallback (YAML faq entries)
         normalized = _normalize(text)
         best: FAQItem | None = None
         best_score = 0
@@ -28,7 +46,12 @@ class KnowledgeBase:
             if score > best_score:
                 best_score = score
                 best = item
-        return best if best_score > 0 else None
+        if best and best_score > 0:
+            logger.info("[faq] KEYWORD match | q=%r | kw_score=%d | a=%s", text[:60], best_score, best.answer[:80].replace('\n', ' '))
+            return best
+
+        logger.info("[faq] NO match | q=%r -> AI fallback", text[:60])
+        return None
 
     async def list_items(self, category: str) -> list[CatalogItem]:
         all_items = await self._catalog.items()

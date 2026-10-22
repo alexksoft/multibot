@@ -13,9 +13,25 @@ _SECRET_PATTERNS = [
 
 class SecretMaskingFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = _mask(str(record.msg))
-        record.args = tuple(_mask(str(a)) for a in record.args) if record.args else record.args
+        masked_msg = _mask(str(record.msg))
+        if masked_msg != str(record.msg):
+            record.msg = masked_msg
+        if record.args:
+            if isinstance(record.args, dict):
+                masked = {k: _mask(str(v)) if _needs_mask(str(v)) else v
+                          for k, v in record.args.items()}
+                if masked != record.args:
+                    record.args = masked
+            else:
+                args = record.args if isinstance(record.args, tuple) else (record.args,)
+                masked = tuple(_mask(str(a)) if _needs_mask(str(a)) else a for a in args)
+                if masked != args:
+                    record.args = masked
         return True
+
+
+def _needs_mask(text: str) -> bool:
+    return any(pat.search(text) for pat in _SECRET_PATTERNS)
 
 
 def _mask(text: str) -> str:

@@ -32,6 +32,13 @@ class Capability(Protocol):
 class CalculateMaterials:
     name = "calculate_materials"
 
+    # default thickness (mm) per work type — used when user is not asked
+    _DEFAULT_THICKNESS = {
+        "штукатурка": 10,
+        "шпаклівка":  2,
+        "стяжка підлоги": 50,
+    }
+
     async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
                   collected: dict, params: dict) -> CapabilityResult:
         all_rules = params.get("_rules", [])
@@ -42,6 +49,9 @@ class CalculateMaterials:
             allowed_ids = work_rules_map.get(work, [])
             if allowed_ids:
                 all_rules = [r for r in all_rules if r.id in allowed_ids]
+        # inject default thickness if not already set
+        if "thickness" not in collected and work in self._DEFAULT_THICKNESS:
+            collected["thickness"] = str(self._DEFAULT_THICKNESS[work])
         results = rules.compute(all_rules, collected, norms)
         if not results:
             return CapabilityResult(False, "Не вдалося розрахувати матеріали. Перевірте введені дані.", error="no results")
@@ -244,13 +254,22 @@ class PrepareRequest:
         height = collected.get("height", "")
         tier   = (collected.get("price_tier") or "").lower()
         tier_label = _TIER_LABELS.get(tier, tier.capitalize())
+        thickness  = collected.get("thickness", "")
+        _THICKNESS_LABEL = {
+            "штукатурка": "шар штукатурки",
+            "шпаклівка":  "шар шпаклівки",
+            "стяжка підлоги": "товщина стяжки",
+        }
+        thickness_label = _THICKNESS_LABEL.get((work or "").lower(), "")
 
         lines = []
 
-        # ── Header ──────────────────────────────────────────────────────────
+        # ── Header ──────────────────────────────────────────────────────────────────
         lines.append(f"🎨 {work}")
         if room and height:
-            lines.append(f"📏 Кімната {room} м, висота стін {height} м")
+            lines.append(f"📏 Кімната {room} м, висота стін {height} м")
+        if thickness and thickness_label:
+            lines.append(f"📏 {thickness_label}: {thickness} мм")
         if tier_label:
             lines.append(f"Клас: {tier_label}")
 
@@ -385,10 +404,25 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         tier_labels = {"економ": "Економ", "середній": "Середній", "преміум": "Преміум"}
         tier_label = tier_labels.get(tier, tier.capitalize())
 
+        thickness_pdf = collected.get("thickness", "")
+        _THICK_PDF = {
+            "штукатурка": "шар штукатурки",
+            "шпаклівка":  "шар шпаклівки",
+            "стяжка підлоги": "товщина стяжки",
+        }
+        thick_lbl_pdf = _THICK_PDF.get((work or "").lower(), "")
+        thickness_pdf = collected.get("thickness", "")
+        _THICK_PDF = {
+            "штукатурка": "шар штукатурки",
+            "шпаклівка":  "шар шпаклівки",
+            "стяжка підлоги": "товщина стяжки",
+        }
+        thick_lbl_pdf = _THICK_PDF.get((work or "").lower(), "")
         subtitle_parts = [p for p in [
             work,
             f"Кімната {room}\u00a0м" if room else "",
             f"висота стін {height}\u00a0м" if height else "",
+            f"{thick_lbl_pdf} {thickness_pdf} мм" if thickness_pdf and thick_lbl_pdf else "",
             f"Клас: {tier_label}" if tier_label else "",
         ] if p]
 

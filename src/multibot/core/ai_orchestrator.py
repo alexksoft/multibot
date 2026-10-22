@@ -41,7 +41,7 @@ class AIOrchestrator:
 
         # 3. LLM if enabled
         if not self._policy.enabled:
-            return "Скористайтеся меню для отримання допомоги."
+            return self._policy.fallback_message or "Уточніть питання."
 
         # Build tools list from allowed_tools
         tools = None

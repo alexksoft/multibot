@@ -22,6 +22,7 @@ from .core.flow import FlowEngine, BotResponse
 from .core.integrations.delivery import ResultDelivery
 from .core.knowledge import KnowledgeBase
 from .core.providers.kiro_gateway import FallbackProvider, KiroGatewayProvider
+from .core.vector_faq import VectorFAQ
 from .core.rules import RuleEngine
 from .core.storage import Storage
 
@@ -72,7 +73,18 @@ def _build_context(cfg: BotConfig, storage: Storage, settings) -> BotContext:
         cfg.knowledge.catalog,
         settings.google_creds_path,
     )
-    knowledge = KnowledgeBase(cfg.knowledge, catalog)
+
+    # vector FAQ — only for bots that have a qa_dir configured
+    vector_faq = None
+    qa_dir = getattr(settings, "building_qa_dir", None)
+    db_dir = getattr(settings, "building_chroma_dir", None)
+    if qa_dir and db_dir and cfg.name == "building_assistant":
+        from pathlib import Path
+        vfaq = VectorFAQ(qa_dir=Path(qa_dir), db_dir=Path(db_dir))
+        vector_faq = vfaq
+        logger.info("[%s] VectorFAQ enabled (db=%s)", cfg.name, db_dir)
+
+    knowledge = KnowledgeBase(cfg.knowledge, catalog, vector_faq=vector_faq)
     rules = RuleEngine()
     capabilities = CapabilityRegistry(cfg.capabilities, knowledge, rules, cfg.knowledge)
 

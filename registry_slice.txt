@@ -1,0 +1,18 @@
+ачте бажаний результат", "Підготуйте приклади (фото)", "Запишіть питання до майстра"],
+            "auto": ["Опишіть симптоми", "Перевірте рівень масла", "Перевірте тиск у шинах", "Підготуйте документи"],
+        }
+        items = items_map.get(template, items_map["general"])
+        text = "✅ Чекліст:\n" + "\n".join(f"☐ {i}" for i in items)
+        return CapabilityResult(True, text)
+
+
+class QuestionsForPro:
+    name = "questions_for_pro"
+
+    async def run(self, knowledge: KnowledgeBase, rules: RuleEngine,
+                  collected: dict, params: dict) -> CapabilityResult:
+        industry = params.get("industry", "")
+        questions_map = {
+            "будівництво": ["Яка технологія підходить для моїх умов?", "Скільки часу займе робота?", "Які матеріали ви рекомендуєте?", "Чи є гарантія на роботу?"],
+            "меблі": ["Які матеріали найдовговічніші?", "Чи можна замовити нестандартний розмір?", "Скільки часу займе виготовлення?"],
+            "авто": ["Що саме потрібно замінити?", "Які деталі використовуєте (оригінал/аналог)?", "Яка гарантія н

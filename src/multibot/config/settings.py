@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     admin_password_hash: str = ""
     admin_session_secret: str = "change_this_to_a_long_random_string"
 
+    # Vector FAQ (building bot)
+    building_qa_dir: str = "data/building_bot/questionsand_answers"
+    building_chroma_dir: str = "data/building_bot/chroma_db"
+
     @property
     def dialog_log_sheet(self) -> str:
         return self.dialog_log_sheet_id or self.google_sheet_id
