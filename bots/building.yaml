@@ -31,6 +31,15 @@ conversation_flows:
           question_type: choice
           options: ["Штукатурка", "Шпаклівка", "Фарбування", "Плитка", "Стяжка підлоги", "Ламінат", "Поклейка шпалер"]
           save_as: work
+          transitions:
+            - { when: "work == 'плитка'", goto: ask_tile_surface }
+          next: ask_price_tier
+        - id: ask_tile_surface
+          kind: question
+          text: "Де укладаєте плитку?"
+          question_type: choice
+          options: ["Підлога", "Стіни", "Підлога і стіни"]
+          save_as: tile_surface
           next: ask_price_tier
         - id: ask_price_tier
           kind: question
@@ -55,7 +64,9 @@ conversation_flows:
             - "6x4"
           save_as: room
           transitions:
-            - { when: "work == 'плитка'",           goto: do_calc }
+            - { when: "work == 'плитка' and tile_surface == 'підлога'", goto: do_calc }
+            - { when: "work == 'плитка' and tile_surface == 'підлога і стіни'", goto: ask_height }
+            - { when: "work == 'плитка' and tile_surface == 'стіни'", goto: ask_height }
             - { when: "work == 'стяжка підлоги'",  goto: do_calc }
             - { when: "work == 'ламінат'",          goto: do_calc }
           next: ask_height
@@ -120,9 +131,12 @@ knowledge:
     - { id: primer_l,     label: "Ґрунтовка",      expression: "wall_area * norms_primer",                unit: "л",  round_to: 1 }
     - { id: putty_kg,     label: "Шпаклівка",      expression: "wall_area * norms_putty * (thickness / 2)",  unit: "кг", round_to: 0 }
     - { id: paint_l,      label: "Фарба",           expression: "wall_area * norms_paint",                 unit: "л",  round_to: 1 }
-    - { id: tile_m2,      label: "Плитка",           expression: "floor_area * norms_tile_waste",           unit: "м²", round_to: 1 }
-    - { id: tile_glue_kg, label: "Клей",             expression: "floor_area * norms_tile_glue",            unit: "кг", round_to: 0 }
+    - { id: tile_m2,      label: "Плитка (підлога)",   expression: "floor_area * norms_tile_waste",           unit: "м²", round_to: 1 }
+    - { id: tile_glue_kg, label: "Клей (підлога)",     expression: "floor_area * norms_tile_glue",            unit: "кг", round_to: 0 }
     - { id: grout_kg,     label: "Затирка",          expression: "floor_area * norms_grout",               unit: "кг", round_to: 1 }
+    - { id: tile_wall_m2,      label: "Плитка (стіни)",   expression: "wall_area * norms_tile_waste",           unit: "м²", round_to: 1 }
+    - { id: tile_wall_glue_kg, label: "Клей (стіни)",     expression: "wall_area * norms_tile_glue",            unit: "кг", round_to: 0 }
+    - { id: grout_wall_kg,     label: "Затирка (стіни)",  expression: "wall_area * norms_grout",               unit: "кг", round_to: 1 }
     - { id: screed_kg,    label: "Цементна стяжка", expression: "floor_area * norms_screed * (thickness / 10)", unit: "кг", round_to: 0 }
     - { id: screed_fiber, label: "Фібра",            expression: "floor_area * norms_fiber",    unit: "кг", round_to: 1 }
     - { id: lam_m2,       label: "Ламінат",          expression: "floor_area * norms_lam_waste", unit: "м²", round_to: 1 }
@@ -147,6 +161,9 @@ knowledge:
     шпаклівка: [wall_area, putty_kg, primer_l]
     фарбування: [wall_area, paint_l, primer_l]
     плитка: [floor_area, tile_m2, tile_glue_kg, grout_kg]
+    підлога: [floor_area, tile_m2, tile_glue_kg, grout_kg]
+    стіни: [wall_area, tile_wall_m2, tile_wall_glue_kg, grout_wall_kg]
+    підлога і стіни: [floor_area, wall_area, tile_m2, tile_glue_kg, grout_kg, tile_wall_m2, tile_wall_glue_kg, grout_wall_kg]
     стяжка підлоги: [floor_area, screed_kg, screed_fiber]
     ламінат: [floor_area, lam_m2, lam_sub_m2]
     поклейка шпалер: [wall_area, wallpaper_rl, wallpaper_glue]
@@ -161,9 +178,9 @@ knowledge:
 # 5. AI Policy
 ai_policy:
   version: 1
-  enabled: false
+  enabled: true
   fallback_message: "Вибачте, будь ласка, але мені не вдалося знайти точну відповідь на ваше запитання. Спробуйте перефразувати його або вказати більше деталей."
-  model: claude-sonnet-4-5
+  model: openai/gpt-oss-20b
   max_tokens: 400
   clarify_when_unsure: true
   allowed_tools: ["calculate_materials", "search_products", "shopping_list", "compare_options"]

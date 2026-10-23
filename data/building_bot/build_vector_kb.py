@@ -16,9 +16,10 @@ from multibot.core.vector_faq import VectorFAQ
 
 QA_DIR = Path(__file__).parent / "questionsand_answers"
 DB_DIR = Path(__file__).parent / "chroma_db"
+SOURCE_FILES = ["translated_repair_faq6.json", "export_all_data.json"]
 
 if __name__ == "__main__":
     DB_DIR.mkdir(parents=True, exist_ok=True)
     vfaq = VectorFAQ(qa_dir=QA_DIR, db_dir=DB_DIR)
-    vfaq.build()
+    vfaq.build(source_files=SOURCE_FILES)
     print("Done. Index stored in:", DB_DIR)

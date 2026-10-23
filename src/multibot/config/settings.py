@@ -5,10 +5,17 @@ from pydantic import Field
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # AI Provider: "groq" or "kiro"
+    ai_provider: str = "groq"
+
+    # Groq
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-20b"  # first in chain, others are fallback
+
     # Kiro Gateway
     kiro_gateway_url: str = ""
     kiro_gateway_api_key: str = ""
-    kiro_gateway_model: str = "claude-opus-4.7"
+    kiro_gateway_model: str = "claude-haiku-4-5"
 
     # Google Sheets
     google_creds_path: str = "config/google-service-account.json"

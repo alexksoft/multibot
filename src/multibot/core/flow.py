@@ -65,14 +65,13 @@ def _eval_transition(when: str, collected: dict) -> bool:
             try:
                 variables[k] = float(v)
             except (TypeError, ValueError):
-                variables[k] = v  # keep strings too
-        # Support string equality: work == 'плитка'
-        import re as _re
-        # Replace 'string' or "string" literals for safe eval
+                variables[k] = v.lower() if isinstance(v, str) else v
         env = dict(variables)
         env["__builtins__"] = {}
-        # Allow simple comparisons with string literals
-        result = eval(compile(ast.parse(when, mode="eval"), "<transition>", "eval"),
+        # Lowercase string literals in condition to match lowercased values
+        when_lower = re.sub(r"'([^']*)'|\"([^\"]*)\"",
+                            lambda m: f"'{(m.group(1) or m.group(2)).lower()}'", when)
+        result = eval(compile(ast.parse(when_lower, mode="eval"), "<transition>", "eval"),
                       {"__builtins__": {}}, env)
         return bool(result)
     except Exception:

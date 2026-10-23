@@ -21,7 +21,7 @@ from .core.dialog_log import log_message
 from .core.flow import FlowEngine, BotResponse
 from .core.integrations.delivery import ResultDelivery
 from .core.knowledge import KnowledgeBase
-from .core.providers.kiro_gateway import FallbackProvider, KiroGatewayProvider
+from .core.providers.kiro_gateway import FallbackProvider, KiroGatewayProvider, GroqProvider
 from .core.vector_faq import VectorFAQ
 from .core.rules import RuleEngine
 from .core.storage import Storage
@@ -67,6 +67,26 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
         )
 
 
+async def _with_typing(bot, chat_id: int, coro):
+    """Run coro while sending typing action every 4s so user sees activity."""
+    import asyncio
+    task = asyncio.ensure_future(coro)
+
+    async def _keep_typing():
+        while not task.done():
+            try:
+                await bot.send_chat_action(chat_id=chat_id, action="typing")
+            except Exception as e:
+                logger.warning("[typing] send_chat_action failed: %s", e)
+            await asyncio.sleep(3)
+
+    typing_task = asyncio.ensure_future(_keep_typing())
+    try:
+        return await task
+    finally:
+        typing_task.cancel()
+
+
 def _build_context(cfg: BotConfig, storage: Storage, settings) -> BotContext:
     catalog = make_catalog_provider(
         cfg.knowledge.sheets,
@@ -88,17 +108,22 @@ def _build_context(cfg: BotConfig, storage: Storage, settings) -> BotContext:
     rules = RuleEngine()
     capabilities = CapabilityRegistry(cfg.capabilities, knowledge, rules, cfg.knowledge)
 
-    if settings.kiro_gateway_url and settings.kiro_gateway_api_key:
+    ai_provider = getattr(settings, "ai_provider", "groq")
+    if ai_provider == "groq" and settings.groq_api_key:
+        logger.info("[%s] using Groq provider (model=%s)", cfg.name, settings.groq_model)
+        provider = GroqProvider(settings.groq_api_key, settings.groq_model)
+    elif ai_provider == "kiro" and settings.kiro_gateway_url and settings.kiro_gateway_api_key:
+        logger.info("[%s] using Kiro Gateway provider", cfg.name)
         provider = KiroGatewayProvider(
             settings.kiro_gateway_url,
             settings.kiro_gateway_api_key,
             settings.kiro_gateway_model,
         )
     else:
-        logger.warning(f"[{cfg.name}] Kiro Gateway not configured, using fallback")
+        logger.warning("[%s] no AI provider configured (ai_provider=%s), using fallback", cfg.name, ai_provider)
         provider = FallbackProvider()
 
-    ai = AIOrchestrator(cfg.ai_policy, cfg.assistant_profile, knowledge, capabilities, provider)
+    ai = AIOrchestrator(cfg.ai_policy, cfg.assistant_profile, knowledge, capabilities, provider, vector_faq=vector_faq)
 
     log_fn = partial(
         log_message,
@@ -168,7 +193,10 @@ class BotManager:
                 creds_path=self._settings.google_creds_path,
             )
             try:
-                response = await ctx.flow_engine.handle(user_id, text)
+                response = await _with_typing(
+                    context.bot, update.message.chat_id,
+                    ctx.flow_engine.handle(user_id, text)
+                )
             except Exception as e:
                 logger.error(f"[{ctx.config.name}] Handler error: {e}", exc_info=True)
                 response = BotResponse("Виникла помилка. Спробуйте ще раз або введіть /start")
@@ -192,7 +220,10 @@ class BotManager:
                 creds_path=self._settings.google_creds_path,
             )
             try:
-                response = await ctx.flow_engine.handle(user_id, data)
+                response = await _with_typing(
+                    query.message.get_bot(), query.message.chat_id,
+                    ctx.flow_engine.handle(user_id, data)
+                )
                 await _send_response(query, response, is_callback=True)
             except Exception as e:
                 import traceback

@@ -24,7 +24,7 @@ class SecretMaskingFilter(logging.Filter):
                     record.args = masked
             else:
                 args = record.args if isinstance(record.args, tuple) else (record.args,)
-                masked = tuple(_mask(str(a)) if _needs_mask(str(a)) else a for a in args)
+                masked = tuple(_mask(str(a)) if isinstance(a, str) and _needs_mask(a) else a for a in args)
                 if masked != args:
                     record.args = masked
         return True

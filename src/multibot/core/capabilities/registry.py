@@ -45,8 +45,15 @@ class CalculateMaterials:
         work_rules_map: dict = params.get("_work_rules", {})
         norms = knowledge.get_norms()
         work = collected.get("work", "").lower()
-        if work and work_rules_map:
-            allowed_ids = work_rules_map.get(work, [])
+        tile_surface = collected.get("tile_surface", "").lower()
+
+        # For tile, use tile_surface to pick the right rule set
+        lookup_key = work
+        if work == "плитка" and tile_surface:
+            lookup_key = tile_surface
+
+        if lookup_key and work_rules_map:
+            allowed_ids = work_rules_map.get(lookup_key, work_rules_map.get(work, []))
             if allowed_ids:
                 all_rules = [r for r in all_rules if r.id in allowed_ids]
         # inject default thickness if not already set

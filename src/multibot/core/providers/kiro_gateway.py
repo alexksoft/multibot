@@ -7,7 +7,15 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-opus-4.7"
+DEFAULT_MODEL = "claude-haiku-4-5"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODELS = [
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.6-27b",
+    "openai/gpt-oss-120b",
+    "groq/compound-mini",
+    "groq/compound",
+]
 
 
 @dataclass
@@ -27,6 +35,59 @@ class FallbackProvider:
             content="Вибачте, AI-асистент тимчасово недоступний. "
                     "Спробуйте пізніше або скористайтеся меню."
         )
+
+
+class GroqProvider:
+    """Groq API provider with model fallback chain."""
+
+    def __init__(self, api_key: str, default_model: str = GROQ_MODELS[0]):
+        self._api_key = api_key
+        self._fallback = FallbackProvider()
+
+    async def complete(
+        self,
+        system: str,
+        messages: list[dict],
+        model: str | None = None,
+        max_tokens: int = 600,
+        tools: list[dict] | None = None,
+    ) -> ProviderResult:
+        if not self._api_key:
+            logger.warning("[groq] API key not configured, using fallback")
+            return await self._fallback.complete(system, messages, model, max_tokens, tools)
+
+        for attempt_model in GROQ_MODELS:
+            payload: dict[str, Any] = {
+                "model": attempt_model,
+                "messages": [{"role": "system", "content": system}, *messages],
+                "max_tokens": max_tokens,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    resp = await client.post(
+                        GROQ_API_URL,
+                        headers={
+                            "Authorization": f"Bearer {self._api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    )
+                    if resp.status_code == 429:
+                        logger.warning("[groq] model %s rate limited, trying next", attempt_model)
+                        continue
+                    if not resp.is_success:
+                        logger.warning("[groq] model %s HTTP %s: %s", attempt_model, resp.status_code, resp.text[:200])
+                        continue
+                    data = resp.json()
+                    msg = data["choices"][0]["message"]
+                    logger.info("[groq] answered with model %s", attempt_model)
+                    return ProviderResult(content=msg.get("content") or "")
+            except Exception as e:
+                logger.warning("[groq] model %s failed: %s", attempt_model, e)
+                continue
+
+        logger.warning("[groq] all models exhausted, using fallback")
+        return await self._fallback.complete(system, messages, model, max_tokens, tools)
 
 
 class KiroGatewayProvider:
