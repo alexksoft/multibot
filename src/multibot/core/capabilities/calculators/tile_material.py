@@ -16,9 +16,10 @@ def calculate(qty_m2: float, pkg_size_m2: float, price_per_m2: float) -> dict:
     if not pkg_size_m2 or pkg_size_m2 <= 0:
         return {"packages": None, "qty_display": f"{qty_m2:g} м²", "total_price": round(price_per_m2 * qty_m2, 2)}
     packages = math.ceil(round(qty_m2 / pkg_size_m2, 6))
-    qty_display = f"{packages} уп. × {pkg_size_m2:g} м²"
-    total_price = price_per_m2 * qty_m2  # price is per m², not per box
-    return {"packages": packages, "qty_display": qty_display, "total_price": total_price}
+    price_per_pkg = round(price_per_m2 * pkg_size_m2, 2)
+    total_price = packages * price_per_pkg
+    qty_display = f"{packages} уп. × {pkg_size_m2:g} м² ({price_per_pkg:,.0f} грн/уп.)"
+    return {"packages": packages, "qty_display": qty_display, "total_price": total_price, "unit_price": price_per_pkg}
 
 
 def can_calculate(rule_unit: str, pkg_unit: str, price_unit: str, pkg_size) -> bool:

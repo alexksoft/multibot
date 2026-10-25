@@ -41,7 +41,15 @@ class MultiCategorySheetsCatalog:
         if self._cache and (now - self._cache_time) < self._ttl:
             return self._cache
 
-        # Each calculator module knows its own worksheet and columns
+        import asyncio
+        loop = asyncio.get_running_loop()
+        all_items = await loop.run_in_executor(None, self._load_sync)
+        self._cache = all_items
+        self._cache_time = time.monotonic()
+        logger.info(f"[catalog] Total: {len(self._cache)} items loaded")
+        return self._cache
+
+    def _load_sync(self) -> list[CatalogItem]:
         from .capabilities.calculators import (
             plaster, putty, primer, paint,
             tile_material, tile_glue, grout,
@@ -49,7 +57,6 @@ class MultiCategorySheetsCatalog:
             laminate, underlay,
             wallpaper, wallpaper_glue,
         )
-
         all_modules = [
             plaster, putty, primer, paint,
             tile_material, tile_glue, grout,
@@ -57,7 +64,6 @@ class MultiCategorySheetsCatalog:
             laminate, underlay,
             wallpaper, wallpaper_glue,
         ]
-
         all_items = []
         for mod in all_modules:
             try:
@@ -67,11 +73,7 @@ class MultiCategorySheetsCatalog:
             except Exception as e:
                 import traceback
                 logger.warning(f"[catalog] Failed to load {mod.CATEGORY}: {e}\n{traceback.format_exc()}")
-
-        self._cache = all_items
-        self._cache_time = now
-        logger.info(f"[catalog] Total: {len(self._cache)} items loaded")
-        return self._cache
+        return all_items
 
 
 def make_catalog_provider(

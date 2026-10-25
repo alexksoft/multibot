@@ -116,7 +116,8 @@ class ShoppingList:
                 qty = 0.0
 
             tier = collected.get("price_tier", "")
-            item = await knowledge.tiered_item(category, tier)
+            catalog_category = category.split(" (")[0].strip()
+            item = await knowledge.tiered_item(catalog_category, tier)
             logger.info(f"[shopping] category={category!r} rule_unit={rule_unit!r} qty={qty} item={'found: '+item.item[:30] if item else 'NOT FOUND'}")
             if not item:
                 shopping_results[rule_id] = {
@@ -139,12 +140,15 @@ class ShoppingList:
                 except ValueError:
                     pass
 
-            calc = dispatch(category, rule_unit, pkg_unit, price_unit, qty, pkg_size, unit_price, volume_l=item.volume_l)
+            calc = dispatch(catalog_category, rule_unit, pkg_unit, price_unit, qty, pkg_size, unit_price, volume_l=item.volume_l)
             logger.info(f"[shopping] dispatch result: category={category!r} pkg_size={pkg_size} pkg_unit={pkg_unit!r} unit_price={unit_price} -> {calc}")
             packages = calc["packages"]
             qty_display = calc["qty_display"]
             if calc["total_price"] is not None:
                 total += calc["total_price"]
+            # dispatch may return a corrected unit_price (e.g. tile: per-package not per-m2)
+            if "unit_price" in calc:
+                unit_price = calc["unit_price"]
 
             price_str = knowledge.format_price(item)
             shopping_results[rule_id] = {
@@ -541,7 +545,7 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                         table_styles.append(("BACKGROUND", (0, rem_row_idx), (-1, rem_row_idx), bg))
                         table_styles.append(("SPAN", (0, rem_row_idx), (-1, rem_row_idx)))
 
-            t = Table(table_data, colWidths=[8*cm, 3*cm, 2.5*cm, 2.5*cm])
+            t = Table(table_data, colWidths=[11*cm, 5*cm])
             t.setStyle(TableStyle(table_styles))
             story.append(t)
 
@@ -553,9 +557,9 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                     reserve_val = total_val * RESERVE_PCT / 100
                     grand_val   = total_val + reserve_val
                     totals_data = [
-                        ["", "", Paragraph("Товари:",                                                    body_s), Paragraph(f"{fmt(total_val)} грн",   body_s)],
-                        ["", "", Paragraph(f"Запас {RESERVE_PCT}% (доставка, дрібниці):",  body_s), Paragraph(f"{fmt(reserve_val)} грн", body_s)],
-                        ["", "", Paragraph("<b>РАЗОМ \u2248</b>",                                          link_s), Paragraph(f"<b>{fmt(grand_val)} грн</b>",  link_s)],
+                        [Paragraph("Товари:",                                                    body_s), Paragraph(f"{fmt(total_val)} грн",   body_s)],
+                        [Paragraph(f"Запас {RESERVE_PCT}% (доставка, дрібниці):",  body_s), Paragraph(f"{fmt(reserve_val)} грн", body_s)],
+                        [Paragraph("<b>РАЗОМ \u2248</b>",                                          link_s), Paragraph(f"<b>{fmt(grand_val)} грн</b>",  link_s)],
                     ]
                     t2 = Table(totals_data, colWidths=[8*cm, 3*cm, 2.5*cm, 2.5*cm])
                     t2.setStyle(TableStyle([
@@ -563,9 +567,10 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                         ("FONTSIZE",     (0, 0), (-1, -1), 10),
                         ("TOPPADDING",   (0, 0), (-1, -1), 3),
                         ("BOTTOMPADDING",(0, 0), (-1, -1), 3),
-                        ("LINEABOVE",    (2, 0), (-1, 0),  0.5, colors.HexColor("#aaaaaa")),
-                        ("LINEABOVE",    (2, 2), (-1, 2),  1.0, colors.HexColor("#333333")),
-                        ("BACKGROUND",   (2, 2), (-1, 2),  colors.HexColor("#dce8f0")),
+                        ("ALIGN",        (1, 0), (1, -1),  "RIGHT"),
+                        ("LINEABOVE",    (0, 0), (-1, 0),  0.5, colors.HexColor("#aaaaaa")),
+                        ("LINEABOVE",    (0, 2), (-1, 2),  1.0, colors.HexColor("#333333")),
+                        ("BACKGROUND",   (0, 2), (-1, 2),  colors.HexColor("#dce8f0")),
                     ]))
                     story.append(t2)
                 except ValueError:

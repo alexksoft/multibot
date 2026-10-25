@@ -35,31 +35,37 @@ NORMS = {
 # ── Rules from building.yaml ──────────────────────────────────────────────────
 
 ALL_RULES = [
-    CalculationRule(id="wall_area",      label="Площа стін",       expression="(room_width + room_length) * 2 * height",        unit="м²",  round_to=1),
-    CalculationRule(id="floor_area",     label="Площа підлоги",    expression="room_width * room_length",                       unit="м²",  round_to=1),
-    CalculationRule(id="plaster_kg",     label="Штукатурка",       expression="wall_area * norms_plaster * (thickness / 10)",   unit="кг",  round_to=0),
-    CalculationRule(id="primer_l",       label="Ґрунтовка",        expression="wall_area * norms_primer",                       unit="л",   round_to=1),
-    CalculationRule(id="putty_kg",       label="Шпаклівка",        expression="wall_area * norms_putty * (thickness / 2)",      unit="кг",  round_to=0),
-    CalculationRule(id="paint_l",        label="Фарба",            expression="wall_area * norms_paint",                        unit="л",   round_to=1),
-    CalculationRule(id="tile_m2",        label="Плитка",           expression="floor_area * norms_tile_waste",                  unit="м²",  round_to=1),
-    CalculationRule(id="tile_glue_kg",   label="Клей",             expression="floor_area * norms_tile_glue",                   unit="кг",  round_to=0),
-    CalculationRule(id="grout_kg",       label="Затирка",          expression="floor_area * norms_grout",                       unit="кг",  round_to=1),
-    CalculationRule(id="screed_kg",      label="Цементна стяжка",  expression="floor_area * norms_screed * (thickness / 10)",   unit="кг",  round_to=0),
-    CalculationRule(id="screed_fiber",   label="Фібра",            expression="floor_area * norms_fiber",                       unit="кг",  round_to=1),
-    CalculationRule(id="lam_m2",         label="Ламінат",          expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
-    CalculationRule(id="lam_sub_m2",     label="Підкладка",        expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
-    CalculationRule(id="wallpaper_rl",   label="Шпалери",          expression="wall_area / norms_wallpaper_roll",               unit="рул", round_to=0),
-    CalculationRule(id="wallpaper_glue", label="Клей для шпалер",  expression="wall_area / norms_wallpaper_glue",               unit="пач", round_to=0),
+    CalculationRule(id="wall_area",           label="Площа стін",         expression="(room_width + room_length) * 2 * height",        unit="м²",  round_to=1),
+    CalculationRule(id="floor_area",          label="Площа підлоги",      expression="room_width * room_length",                       unit="м²",  round_to=1),
+    CalculationRule(id="plaster_kg",          label="Штукатурка",         expression="wall_area * norms_plaster * (thickness / 10)",   unit="кг",  round_to=0),
+    CalculationRule(id="primer_l",            label="Ґрунтовка",          expression="wall_area * norms_primer",                       unit="л",   round_to=1),
+    CalculationRule(id="putty_kg",            label="Шпаклівка",          expression="wall_area * norms_putty * (thickness / 2)",      unit="кг",  round_to=0),
+    CalculationRule(id="paint_l",             label="Фарба",              expression="wall_area * norms_paint",                        unit="л",   round_to=1),
+    CalculationRule(id="tile_m2",             label="Плитка (підлога)",   expression="floor_area * norms_tile_waste",                  unit="м²",  round_to=1),
+    CalculationRule(id="tile_glue_kg",        label="Клей (підлога)",     expression="floor_area * norms_tile_glue",                   unit="кг",  round_to=0),
+    CalculationRule(id="grout_kg",            label="Затирка",            expression="floor_area * norms_grout",                       unit="кг",  round_to=1),
+    CalculationRule(id="tile_wall_m2",        label="Плитка (стіни)",     expression="wall_area * norms_tile_waste",                   unit="м²",  round_to=1),
+    CalculationRule(id="tile_wall_glue_kg",   label="Клей (стіни)",       expression="wall_area * norms_tile_glue",                    unit="кг",  round_to=0),
+    CalculationRule(id="grout_wall_kg",       label="Затирка (стіни)",    expression="wall_area * norms_grout",                        unit="кг",  round_to=1),
+    CalculationRule(id="screed_kg",           label="Цементна стяжка",    expression="floor_area * norms_screed * (thickness / 10)",   unit="кг",  round_to=0),
+    CalculationRule(id="screed_fiber",        label="Фібра",              expression="floor_area * norms_fiber",                       unit="кг",  round_to=1),
+    CalculationRule(id="lam_m2",              label="Ламінат",            expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
+    CalculationRule(id="lam_sub_m2",          label="Підкладка",          expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
+    CalculationRule(id="wallpaper_rl",        label="Шпалери",            expression="wall_area / norms_wallpaper_roll",               unit="рул", round_to=0),
+    CalculationRule(id="wallpaper_glue",      label="Клей для шпалер",    expression="wall_area / norms_wallpaper_glue",               unit="пач", round_to=0),
 ]
 
 WORK_RULES = {
-    "штукатурка":      ["wall_area", "plaster_kg", "primer_l"],
-    "шпаклівка":       ["wall_area", "putty_kg",   "primer_l"],
-    "фарбування":      ["wall_area", "paint_l",    "primer_l"],
-    "плитка":          ["floor_area", "tile_m2",   "tile_glue_kg", "grout_kg"],
-    "стяжка підлоги":  ["floor_area", "screed_kg", "screed_fiber"],
-    "ламінат":         ["floor_area", "lam_m2",    "lam_sub_m2"],
-    "поклейка шпалер": ["wall_area",  "wallpaper_rl", "wallpaper_glue"],
+    "штукатурка":           ["wall_area", "plaster_kg", "primer_l"],
+    "шпаклівка":            ["wall_area", "putty_kg",   "primer_l"],
+    "фарбування":           ["wall_area", "paint_l",    "primer_l"],
+    "плитка":               ["floor_area", "tile_m2",   "tile_glue_kg", "grout_kg"],
+    "підлога":              ["floor_area", "tile_m2",   "tile_glue_kg", "grout_kg"],
+    "стіни":                ["wall_area",  "tile_wall_m2", "tile_wall_glue_kg", "grout_wall_kg"],
+    "підлога і стіни":      ["floor_area", "wall_area", "tile_m2", "tile_glue_kg", "grout_kg", "tile_wall_m2", "tile_wall_glue_kg", "grout_wall_kg"],
+    "стяжка підлоги":       ["floor_area", "screed_kg", "screed_fiber"],
+    "ламінат":              ["floor_area", "lam_m2",    "lam_sub_m2"],
+    "поклейка шпалер":      ["wall_area",  "wallpaper_rl", "wallpaper_glue"],
 }
 
 DEFAULT_THICKNESS = {
@@ -350,3 +356,127 @@ class TestDimensionParsing:
     def test_square_room(self):
         r = calc("ламінат", "5x5")
         assert r["floor_area"]["value"] == pytest.approx(25.0, abs=0.1)
+
+
+# ── Плитка підлога ────────────────────────────────────────────────────────────
+
+class TestTileFloor:
+    def test_room_4x5(self):
+        r = calc("підлога", "4x5")
+        floor_area = 4 * 5
+        assert r["tile_m2"]["value"] == pytest.approx(floor_area * 1.1, abs=0.1)
+        assert r["tile_glue_kg"]["value"] == round(floor_area * 5.0)
+        assert r["grout_kg"]["value"] == pytest.approx(floor_area * 0.3, abs=0.1)
+
+    def test_no_wall_tile_rules(self):
+        r = calc("підлога", "3x4")
+        assert "tile_wall_m2" not in r
+        assert "tile_wall_glue_kg" not in r
+        assert "grout_wall_kg" not in r
+
+    def test_units(self):
+        r = calc("підлога", "4x5")
+        assert r["tile_m2"]["unit"] == "м²"
+        assert r["tile_glue_kg"]["unit"] == "кг"
+
+
+# ── Плитка стіни ──────────────────────────────────────────────────────────────
+
+class TestTileWall:
+    def test_room_4x5_h27(self):
+        r = calc("стіни", "4x5", height=2.7)
+        wall_area = (4 + 5) * 2 * 2.7
+        assert r["tile_wall_m2"]["value"] == pytest.approx(wall_area * 1.1, abs=0.1)
+        assert r["tile_wall_glue_kg"]["value"] == round(wall_area * 5.0)
+        assert r["grout_wall_kg"]["value"] == pytest.approx(wall_area * 0.3, abs=0.1)
+
+    def test_no_floor_tile_rules(self):
+        r = calc("стіни", "4x5", height=2.7)
+        assert "tile_m2" not in r
+        assert "tile_glue_kg" not in r
+        assert "floor_area" not in r
+
+    def test_units(self):
+        r = calc("стіни", "4x5", height=2.7)
+        assert r["tile_wall_m2"]["unit"] == "м²"
+        assert r["tile_wall_glue_kg"]["unit"] == "кг"
+        assert r["grout_wall_kg"]["unit"] == "кг"
+
+
+# ── Плитка підлога і стіни ────────────────────────────────────────────────────
+
+class TestTileBoth:
+    def test_room_4x5_h27(self):
+        r = calc("підлога і стіни", "4x5", height=2.7)
+        floor_area = 4 * 5
+        wall_area = (4 + 5) * 2 * 2.7
+        assert r["tile_m2"]["value"] == pytest.approx(floor_area * 1.1, abs=0.1)
+        assert r["tile_wall_m2"]["value"] == pytest.approx(wall_area * 1.1, abs=0.1)
+        assert r["tile_glue_kg"]["value"] == round(floor_area * 5.0)
+        assert r["tile_wall_glue_kg"]["value"] == round(wall_area * 5.0)
+
+    def test_has_both_floor_and_wall(self):
+        r = calc("підлога і стіни", "4x5", height=2.7)
+        assert "floor_area" in r
+        assert "wall_area" in r
+        assert "tile_m2" in r
+        assert "tile_wall_m2" in r
+        assert "grout_kg" in r
+        assert "grout_wall_kg" in r
+
+    def test_wall_tile_more_than_floor(self):
+        r = calc("підлога і стіни", "4x5", height=2.7)
+        assert r["tile_wall_m2"]["value"] > r["tile_m2"]["value"]
+
+
+# ── Ламінат: пакування та реальний приклад 6x4 ───────────────────────────────
+
+class TestLaminatePackaging:
+    """
+    Real example: room 6x4, height 2.7, tier Середній
+    Floor area: 24 m²
+    With 10% waste: 26.4 m²
+    Underlay pack: 16.5 m² → needs 2 packs = 33 m²
+    Laminate pack size varies by product
+    """
+
+    def test_room_6x4_floor_area(self):
+        r = calc("ламінат", "6x4")
+        assert r["floor_area"]["value"] == pytest.approx(24.0, abs=0.1)
+
+    def test_room_6x4_laminate_with_waste(self):
+        r = calc("ламінат", "6x4")
+        assert r["lam_m2"]["value"] == pytest.approx(24.0 * 1.1, abs=0.1)  # 26.4
+
+    def test_room_6x4_underlay_equals_laminate(self):
+        r = calc("ламінат", "6x4")
+        assert r["lam_sub_m2"]["value"] == r["lam_m2"]["value"]  # both 26.4
+
+    def test_underlay_packages_rounded_up(self):
+        """26.4 m² / 16.5 m² per pack = 1.6 → must round UP to 2 packs."""
+        import math
+        qty = 24.0 * 1.1   # 26.4
+        pack_size = 16.5
+        packs = math.ceil(qty / pack_size)
+        assert packs == 2
+        assert packs * pack_size >= qty  # bought >= needed
+
+    def test_underlay_2_packs_covers_floor(self):
+        """2 packs × 16.5 = 33 m² which covers 26.4 m²."""
+        packs = 2
+        pack_size = 16.5
+        assert packs * pack_size == pytest.approx(33.0, abs=0.01)
+        assert packs * pack_size >= 24.0 * 1.1
+
+    def test_height_does_not_affect_laminate(self):
+        """Wall height is irrelevant for floor laminate."""
+        r27 = calc("ламінат", "6x4", height=2.7)
+        r30 = calc("ламінат", "6x4", height=3.0)
+        assert r27["lam_m2"]["value"] == r30["lam_m2"]["value"]
+        assert r27["floor_area"]["value"] == r30["floor_area"]["value"]
+
+    def test_room_6x4_no_wall_rules(self):
+        r = calc("ламінат", "6x4")
+        assert "wall_area" not in r
+        assert "plaster_kg" not in r
+        assert "paint_l" not in r
