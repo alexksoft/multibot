@@ -18,7 +18,7 @@ from multibot.config.sections import CalculationRule
 # ── Norms from building.yaml ──────────────────────────────────────────────────
 
 NORMS = {
-    "norms_plaster":        8.5,
+    "norms_plaster":        15.5,
     "norms_primer":         0.15,
     "norms_putty":          1.2,
     "norms_paint":          0.25,
@@ -99,19 +99,19 @@ class TestPlaster:
         r = calc("штукатурка", "4x5", height=2.7, thickness=10)
         wall_area = (4 + 5) * 2 * 2.7  # 48.6
         assert r["wall_area"]["value"] == pytest.approx(48.6, abs=0.1)
-        assert r["plaster_kg"]["value"] == round(wall_area * 8.5 * (10 / 10))
+        assert r["plaster_kg"]["value"] == round(wall_area * 15.5 * (10 / 10))
         assert r["primer_l"]["value"] == pytest.approx(wall_area * 0.15, abs=0.1)
 
     def test_room_3x4_h25_t15(self):
         r = calc("штукатурка", "3x4", height=2.5, thickness=15)
         wall_area = (3 + 4) * 2 * 2.5  # 35.0
         assert r["wall_area"]["value"] == pytest.approx(35.0, abs=0.1)
-        assert r["plaster_kg"]["value"] == round(wall_area * 8.5 * (15 / 10))
+        assert r["plaster_kg"]["value"] == round(wall_area * 15.5 * (15 / 10))
 
     def test_room_5x6_h30_t20(self):
         r = calc("штукатурка", "5x6", height=3.0, thickness=20)
         wall_area = (5 + 6) * 2 * 3.0  # 66.0
-        assert r["plaster_kg"]["value"] == round(wall_area * 8.5 * (20 / 10))
+        assert r["plaster_kg"]["value"] == round(wall_area * 15.5 * (20 / 10))
 
     def test_thickness_doubles_plaster(self):
         r10 = calc("штукатурка", "4x5", thickness=10)

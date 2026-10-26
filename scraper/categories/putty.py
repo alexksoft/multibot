@@ -70,6 +70,7 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
         kiro_key=kiro_key,
     )
     rows = await adapter.fetch(CATEGORY, URL)
+    rows = [r for r in rows if r.package_size and r.package_size >= 10]
     for row in rows:
         row.price_per_unit = normalize_price(row)
     return rows

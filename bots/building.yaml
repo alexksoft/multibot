@@ -144,7 +144,7 @@ knowledge:
     - { id: wallpaper_rl,  label: "Шпалери",         expression: "wall_area / norms_wallpaper_roll", unit: "рул", round_to: 0 }
     - { id: wallpaper_glue, label: "Клей для шпалер", expression: "wall_area / norms_wallpaper_glue", unit: "пач", round_to: 0 }
   norms:
-    norms_plaster: 8.5
+    norms_plaster: 15.5
     norms_primer: 0.15
     norms_putty: 1.2
     norms_paint: 0.25

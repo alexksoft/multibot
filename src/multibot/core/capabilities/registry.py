@@ -436,7 +436,7 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         subtitle_parts = [p for p in [
             work,
             f"Кімната {room}\u00a0м" if room else "",
-            f"висота стін {height}\u00a0м" if height else "",
+            f"висота сін {height}\u00a0м" if height and work.lower() not in ("ламінат", "стяжка підлоги") and not (work.lower() == "плитка" and (collected.get("tile_surface") or "").lower() == "підлога") else "",
             f"{thick_lbl_pdf} {thickness_pdf} мм" if thickness_pdf and thick_lbl_pdf else "",
             f"Клас: {tier_label}" if tier_label else "",
         ] if p]
