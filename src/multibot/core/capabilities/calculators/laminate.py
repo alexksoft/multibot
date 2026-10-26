@@ -2,16 +2,23 @@
 #
 # Ламінат is sold in boxes. Price is per M² (грн/м²).
 # The rule gives us total M² needed (includes 10% waste factor).
-# Box m² coverage not always available — show raw m², total = price × m².
 
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
 CATEGORY = "Ламінат"
 
 
-def calculate(qty_m2: float, price_per_m2: float) -> dict:
+def calculate(qty_m2: float, price_per_m2: float, pkg_size_m2: float = None) -> dict:
+    if pkg_size_m2 and pkg_size_m2 > 0:
+        packages = math.ceil(round(qty_m2 / pkg_size_m2, 6))
+        price_per_pkg = round(price_per_m2 * pkg_size_m2, 2)
+        total_price = packages * price_per_pkg
+        qty_display = f"{packages} уп. × {pkg_size_m2:g} м² ({price_per_pkg:,.0f} грн/уп.)"
+        return {"packages": packages, "qty_display": qty_display, "total_price": total_price, "unit_price": price_per_pkg}
+    # fallback: no package size known
     qty_display = f"{qty_m2:g} м²"
     total_price = price_per_m2 * qty_m2
     return {"packages": None, "qty_display": qty_display, "total_price": total_price}
@@ -36,14 +43,14 @@ def load_items(creds_path: str, sheet_id: str) -> list:
                 continue
             try:
                 price = to_float(row.get("price"))
-                weight_kg = to_float(row.get("weight_kg"))
+                box_m2 = to_float(row.get("box_m2")) or to_float(row.get("roll_m2"))
                 result.append(CatalogItem(
                     category=CATEGORY, item=str(row.get("item", "")).strip(),
                     price=price, unit=str(row.get("price_unit", "грн/м²")).strip(),
                     source_name=str(row.get("source_name", "")).strip() or None,
                     source_url=str(row.get("source_url", "")).strip() or None,
                     collected_at=str(row.get("collected_at", "")).strip() or None,
-                    package_size=weight_kg, package_unit="кг" if weight_kg else None,
+                    package_size=box_m2, package_unit="м²" if box_m2 else None,
                 ))
             except Exception as row_err:
                 logger.debug(f"[{CATEGORY}] row {row_idx} skipped: {row_err}")

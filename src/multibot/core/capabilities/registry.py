@@ -277,8 +277,11 @@ class PrepareRequest:
 
         # ── Header ──────────────────────────────────────────────────────────────────
         lines.append(f"🎨 {work}")
-        if room and height:
+        _floor_only = (work.lower() in ("ламінат", "стяжка підлоги") or (work.lower() == "плитка" and (collected.get("tile_surface") or "").lower() == "підлога"))
+        if room and height and not _floor_only:
             lines.append(f"📏 Кімната {room} м, висота стін {height} м")
+        elif room and _floor_only:
+            lines.append(f"📏 Кімната {room} м")
         if thickness and thickness_label:
             lines.append(f"📏 {thickness_label}: {thickness} мм")
         if tier_label:
@@ -375,7 +378,8 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         import io, os, math
 
         buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4,
+        from reportlab.lib.pagesizes import landscape
+        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
                                 leftMargin=2*cm, rightMargin=2*cm,
                                 topMargin=2*cm, bottomMargin=2*cm)
 

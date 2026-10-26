@@ -1,3 +1,4 @@
+from typing import Optional
 # putty.py — scraper for Шпаклівка (putty / wall filler)
 #
 # Each bag of putty has a weight in KG.
@@ -36,7 +37,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """Calculate price per 1 kg. Returns None if package weight is missing."""
     if not row.package_size or row.package_size <= 0:
         return None

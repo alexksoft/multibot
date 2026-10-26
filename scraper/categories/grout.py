@@ -1,3 +1,4 @@
+from typing import Optional
 # grout.py — scraper for Затирка (tile grout)
 #
 # Grout is sold in small bags measured in KG.
@@ -36,7 +37,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """Calculate price per 1 kg."""
     if not row.package_size or row.package_size <= 0:
         return None
@@ -69,6 +70,9 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
         kiro_key=kiro_key,
     )
     rows = await adapter.fetch(CATEGORY, URL)
+    # Exclude non-grout items that appear in this category
+    _EXCLUDE_PREFIX = ("Поліпласт", "Олівець")
+    rows = [r for r in rows if r.item.startswith("Затірка") and not r.item.startswith(_EXCLUDE_PREFIX)]
     for row in rows:
         row.price_per_unit = normalize_price(row)
     return rows

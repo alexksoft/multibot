@@ -1,3 +1,4 @@
+from typing import Optional
 # fiber.py — scraper for Фібра (fibre for concrete reinforcement)
 #
 # Fibre is sold in small bags measured in KG.
@@ -36,7 +37,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """Calculate price per 1 kg."""
     if not row.package_size or row.package_size <= 0:
         return None

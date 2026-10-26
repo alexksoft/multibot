@@ -1,3 +1,4 @@
+from typing import Optional
 # paint.py — scraper for Фарба (paint)
 #
 # Paint is a LIQUID sold in cans.
@@ -42,7 +43,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """
     Calculate price per 1 litre.
     Uses volume_l if available. Returns None if volume is unknown.

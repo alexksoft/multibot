@@ -1,3 +1,4 @@
+from typing import Optional
 # wallpaper.py — scraper for Шпалери (wallpaper)
 #
 # Wallpaper is sold per ROLL. Price is per roll (грн).
@@ -35,8 +36,8 @@ HEADER = [
     "item",
     "price",
     "price_unit",     # "грн" (per roll)
-    "weight_kg",      # roll weight in kg
-    "price_per_roll", # same as price — used for sorting (cheapest roll first)
+    "roll_m2",        # m² per roll (width × length)
+    "price_per_m2",   # price / roll_m2 — used for sorting (cheapest per m² first)
     "source_name",
     "source_url",
     "collected_at",
@@ -44,14 +45,33 @@ HEADER = [
     "notes",
 ]
 
+# Regex to extract roll dimensions from product name e.g. "1,06x10 м" or "0.53 x 10.05 m"
+import re as _re
+_ROLL_DIM_RE = _re.compile(
+    r'(\d+[.,]\d+)\s*[xXхХ×]\s*(\d+[.,]\d+)\s*м\b',
+    _re.IGNORECASE
+)
 
-def normalize_price(row) -> float | None:
+
+def _roll_m2(item_name: str) -> Optional[float]:
+    """Extract m² per roll from product name dimensions."""
+    m = _ROLL_DIM_RE.search(item_name)
+    if m:
+        w = float(m.group(1).replace(',', '.'))
+        l = float(m.group(2).replace(',', '.'))
+        return round(w * l, 4)
+    return None
+
+
+def normalize_price(row) -> Optional[float]:
     """
-    For wallpaper, price is per roll.
-    price_per_unit = price (per roll) — used to sort cheapest roll first.
+    Keep price per roll for display. Sort by price per m² for fair comparison.
+    price_per_unit = price_per_m2 for sorting, but row.price stays per roll.
     """
     if row.price and row.price > 0:
-        return round(row.price, 4)
+        if row.package_size and row.package_size > 0:
+            return round(row.price / row.package_size, 4)  # грн/м² for sorting
+        return round(row.price, 4)  # fallback
     return None
 
 
@@ -60,7 +80,7 @@ def to_row(row) -> list:
         row.item,
         row.price,
         row.price_unit,
-        row.package_size or "",   # weight_kg
+        row.package_size or "",   # roll_m2
         row.price_per_unit or "", # price_per_roll
         row.source_name,
         row.source_url,

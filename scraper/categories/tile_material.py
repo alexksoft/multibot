@@ -1,3 +1,4 @@
+from typing import Optional
 # tile_material.py — scraper for Плитка (ceramic tile)
 #
 # Tile is sold in boxes. Price is already per M² (грн/м²).
@@ -38,7 +39,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """
     For tile, price is already per m².
     So price_per_unit = price directly.
@@ -76,6 +77,9 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
         kiro_key=kiro_key,
     )
     rows = await adapter.fetch(CATEGORY, URL)
+    # Exclude non-tile items
+    _EXCLUDE = ("3D панель", "3D-панель")
+    rows = [r for r in rows if not r.item.startswith(_EXCLUDE)]
     for row in rows:
         row.price_per_unit = normalize_price(row)
     return rows

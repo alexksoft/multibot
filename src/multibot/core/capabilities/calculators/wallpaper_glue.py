@@ -40,14 +40,15 @@ def load_items(creds_path: str, sheet_id: str) -> list:
                 continue
             try:
                 price = to_float(row.get("price"))
-                weight_kg = to_float(row.get("weight_kg"))
+                volume_l = to_float(row.get("volume_l"))
                 result.append(CatalogItem(
                     category=CATEGORY, item=str(row.get("item", "")).strip(),
                     price=price, unit=str(row.get("price_unit", "грн")).strip(),
                     source_name=str(row.get("source_name", "")).strip() or None,
                     source_url=str(row.get("source_url", "")).strip() or None,
                     collected_at=str(row.get("collected_at", "")).strip() or None,
-                    package_size=weight_kg, package_unit="кг" if weight_kg else None,
+                    package_size=1, package_unit="пач",
+                    volume_l=volume_l,
                 ))
             except Exception as row_err:
                 logger.debug(f"[{CATEGORY}] row {row_idx} skipped: {row_err}")

@@ -1,3 +1,4 @@
+from typing import Optional
 # tile_glue.py — scraper for Клей (tile adhesive)
 #
 # Tile glue is sold in bags measured in KG.
@@ -36,7 +37,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """Calculate price per 1 kg."""
     if not row.package_size or row.package_size <= 0:
         return None
@@ -69,6 +70,9 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
         kiro_key=kiro_key,
     )
     rows = await adapter.fetch(CATEGORY, URL)
+    # Exclude non-tile-glue items
+    _EXCLUDE = ("Клей для плитки та мозаїки",)
+    rows = [r for r in rows if not r.item.startswith(_EXCLUDE)]
     for row in rows:
         row.price_per_unit = normalize_price(row)
     return rows

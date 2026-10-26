@@ -1,3 +1,4 @@
+from typing import Optional
 # laminate.py — scraper for Ламінат (laminate flooring)
 #
 # Laminate is sold in boxes. Price is per M² (грн/м²).
@@ -28,7 +29,7 @@ HEADER = [
     "item",
     "price",
     "price_unit",     # "грн/м²"
-    "weight_kg",      # box weight in kg (box m² coverage not always available)
+    "box_m2",         # m² coverage per box (Площа в упаковці)
     "price_per_m2",   # same as price — used for sorting
     "source_name",
     "source_url",
@@ -38,7 +39,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """
     For laminate, price is already per m².
     price_per_unit = price directly.

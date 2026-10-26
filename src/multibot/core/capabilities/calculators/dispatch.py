@@ -78,12 +78,12 @@ def dispatch(
     # --- Ламінат ---
     elif mod is laminate:
         if mod.can_calculate(rule_unit, price_unit):
-            return mod.calculate(qty, unit_price)
+            return mod.calculate(qty, unit_price, pkg_size_m2=pkg_size)
 
     # --- Підкладка ---
     elif mod is underlay:
         if mod.can_calculate(rule_unit):
-            return mod.calculate(qty, unit_price, price_unit)
+            return mod.calculate(qty, unit_price, price_unit, pkg_size_m2=pkg_size)
 
     # --- Шпалери ---
     elif mod is wallpaper:

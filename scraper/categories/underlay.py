@@ -1,3 +1,4 @@
+from typing import Optional
 # underlay.py — scraper for Підкладка (underlay for laminate)
 #
 # Underlay is sold in rolls. Price can be per M² (грн/м²) or per roll (грн).
@@ -44,7 +45,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """
     Normalize to грн per m².
     Case 1: price already per m² → use directly.

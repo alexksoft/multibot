@@ -1,3 +1,4 @@
+from typing import Optional
 # plaster.py — scraper for Штукатурка (plaster)
 #
 # Each bag of plaster has a weight in KG.
@@ -39,7 +40,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """
     Calculate price per 1 kg.
     We need: price (грн) and package weight (kg).

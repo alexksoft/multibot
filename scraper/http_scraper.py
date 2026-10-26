@@ -28,7 +28,7 @@ _PRICE_PAIR_RE = re.compile(
     re.IGNORECASE
 )
 _PRICE_PER_M2_RE = re.compile(
-    r'([\d]+(?:[.,]\d+)?)\s*(?:₴|грн)\s*/\s*кв\.?\s*м',
+    r'([\d][\d\s\u00a0]*(?:[.,]\d+)?)\s*(?:\u20b4|\u0433\u0440\u043d)\s*/\s*\u043a\u0432\.?\s*\u043c',
     re.IGNORECASE
 )
 _NUM_RE = re.compile(r'([\d]+(?:[.,]\d+)?)')
@@ -67,14 +67,38 @@ def _extract_pkg_from_chars(chars: dict) -> tuple:
 
     # --- Package size (weight or area) ---
 
-    # Priority 1: tile — area per package (m²)
+    # Priority 1: area per package (m²) — tile, laminate, underlay
     for key, val in chars.items():
         kl = key.lower()
-        if "кількість" in kl and "упак" in kl and "кв.м" in kl:
+        # Epicentr: "Площа в упаковці" or "Кількість в упаковці (кв.м)"
+        is_area_key = (
+            ("площа" in kl and "упак" in kl) or
+            ("кількість" in kl and "упак" in kl and "кв" in kl) or
+            ("кількість" in kl and "упак" in kl and "м²" in kl)
+        )
+        if is_area_key:
             m = _NUM_RE.search(val)
             if m:
                 package_size, package_unit = _n(m.group(1)), "м²"
                 return package_size, package_unit, volume_l
+
+    # Priority 1b: wallpaper — Ширина рулону + Довжина рулону
+    width_m = None
+    length_m = None
+    for key, val in chars.items():
+        kl = key.lower()
+        if "ширина" in kl and "рул" in kl:
+            m = _NUM_RE.search(val)
+            if m:
+                width_m = _n(m.group(1))
+        elif "довжина" in kl and "рул" in kl:
+            m = _NUM_RE.search(val)
+            if m:
+                length_m = _n(m.group(1))
+    if width_m and length_m:
+        package_size = round(width_m * length_m, 4)
+        package_unit = "м²"
+        return package_size, package_unit, volume_l
 
     # Priority 2: фасування — actual packaging size
     for key, val in chars.items():
@@ -100,7 +124,7 @@ def _extract_pkg_from_chars(chars: dict) -> tuple:
 
 
 def _n(s: str) -> float:
-    return float(s.replace(',', '.'))
+    return float(s.replace('\u00a0', '').replace(' ', '').replace(',', '.'))
 
 
 def check_robots(base_url: str, path: str):
@@ -230,9 +254,11 @@ async def _enrich_rows(rows: list[ScrapedRow], client: httpx.AsyncClient,
             row.price = data["price_per_m2"]
             row.price_unit = "грн/м²"
         elif data["package_size"] and data["package_unit"] == "м²" and data["package_size"] > 0:
-            # Normalize: per-package price → per-m² (Option A)
-            row.price = round(row.price / data["package_size"], 2)
-            row.price_unit = "грн/м²"
+            # Normalize per-package price → per-m² ONLY for tile/laminate/underlay
+            # NOT for wallpaper (price is per roll, roll_m2 is just for package count)
+            if row.price_unit not in ("грн", "грн/рул", "грн/ролл"):
+                row.price = round(row.price / data["package_size"], 2)
+                row.price_unit = "грн/м²"
 
     await asyncio.gather(*[enrich_one(r) for r in rows])
 

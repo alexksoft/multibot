@@ -138,7 +138,7 @@ knowledge:
     - { id: tile_wall_glue_kg, label: "Клей (стіни)",     expression: "wall_area * norms_tile_glue",            unit: "кг", round_to: 0 }
     - { id: grout_wall_kg,     label: "Затирка (стіни)",  expression: "wall_area * norms_grout",               unit: "кг", round_to: 1 }
     - { id: screed_kg,    label: "Цементна стяжка", expression: "floor_area * norms_screed * (thickness / 10)", unit: "кг", round_to: 0 }
-    - { id: screed_fiber, label: "Фібра",            expression: "floor_area * norms_fiber",    unit: "кг", round_to: 1 }
+    - { id: screed_fiber, label: "Фібра",            expression: "floor_area * (thickness / 1000) * norms_fiber", unit: "кг", round_to: 2 }
     - { id: lam_m2,       label: "Ламінат",          expression: "floor_area * norms_lam_waste", unit: "м²", round_to: 1 }
     - { id: lam_sub_m2,   label: "Підкладка",        expression: "floor_area * norms_lam_waste", unit: "м²", round_to: 1 }
     - { id: wallpaper_rl,  label: "Шпалери",         expression: "wall_area / norms_wallpaper_roll", unit: "рул", round_to: 0 }
@@ -152,7 +152,7 @@ knowledge:
     norms_tile_glue: 5.0
     norms_grout: 0.3
     norms_screed: 20.0
-    norms_fiber: 0.6
+    norms_fiber: 0.75
     norms_lam_waste: 1.1
     norms_wallpaper_roll: 5.0
     norms_wallpaper_glue: 25.0

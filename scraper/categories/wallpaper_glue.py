@@ -1,3 +1,4 @@
+from typing import Optional
 # wallpaper_glue.py — scraper for Клей для шпалер (wallpaper glue)
 #
 # Wallpaper glue is sold in packets measured in KG.
@@ -26,8 +27,8 @@ HEADER = [
     "item",
     "price",
     "price_unit",
-    "weight_kg",
-    "price_per_kg",
+    "volume_l",       # volume in liters per package
+    "price_per_l",    # price per liter — used for sorting
     "source_name",
     "source_url",
     "collected_at",
@@ -36,21 +37,21 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
-    """Calculate price per 1 kg."""
-    if not row.package_size or row.package_size <= 0:
+def normalize_price(row) -> Optional[float]:
+    """Calculate price per 1 litre."""
+    vol = row.volume_l or (row.package_size if (row.package_unit or "").lower() == "л" else None)
+    if not vol or vol <= 0:
         return None
-    if (row.package_unit or "").lower() != "кг":
-        return None
-    return round(row.price / row.package_size, 4)
+    return round(row.price / vol, 4)
 
 
 def to_row(row) -> list:
+    vol = row.volume_l or (row.package_size if (row.package_unit or "").lower() == "л" else None)
     return [
         row.item,
         row.price,
         row.price_unit,
-        row.package_size or "",
+        vol or "",
         row.price_per_unit or "",
         row.source_name,
         row.source_url,

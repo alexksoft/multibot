@@ -11,12 +11,22 @@ logger = logging.getLogger(__name__)
 CATEGORY = "Підкладка"
 
 
-def calculate(qty_m2: float, price_per_unit: float, price_unit: str) -> dict:
+def calculate(qty_m2: float, price_per_unit: float, price_unit: str, pkg_size_m2: float = None) -> dict:
+    if pkg_size_m2 and pkg_size_m2 > 0:
+        packages = math.ceil(round(qty_m2 / pkg_size_m2, 6))
+        if "м²" in price_unit or "m2" in price_unit.lower():
+            price_per_pkg = round(price_per_unit * pkg_size_m2, 2)
+        else:
+            price_per_pkg = price_per_unit  # price already per roll
+        total_price = packages * price_per_pkg
+        qty_display = f"{packages} уп. × {pkg_size_m2:g} м² ({price_per_pkg:,.0f} грн/уп.)"
+        return {"packages": packages, "qty_display": qty_display, "total_price": total_price, "unit_price": price_per_pkg}
+    # fallback
     qty_display = f"{qty_m2:g} м²"
     if "м²" in price_unit or "m2" in price_unit.lower():
         total_price = price_per_unit * qty_m2
     else:
-        total_price = None  # price per roll, roll m² unknown
+        total_price = None
     return {"packages": None, "qty_display": qty_display, "total_price": total_price}
 
 

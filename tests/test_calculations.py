@@ -26,7 +26,7 @@ NORMS = {
     "norms_tile_glue":      5.0,
     "norms_grout":          0.3,
     "norms_screed":         20.0,
-    "norms_fiber":          0.6,
+    "norms_fiber":          0.75,
     "norms_lam_waste":      1.1,
     "norms_wallpaper_roll": 5.0,
     "norms_wallpaper_glue": 25.0,
@@ -48,7 +48,7 @@ ALL_RULES = [
     CalculationRule(id="tile_wall_glue_kg",   label="Клей (стіни)",       expression="wall_area * norms_tile_glue",                    unit="кг",  round_to=0),
     CalculationRule(id="grout_wall_kg",       label="Затирка (стіни)",    expression="wall_area * norms_grout",                        unit="кг",  round_to=1),
     CalculationRule(id="screed_kg",           label="Цементна стяжка",    expression="floor_area * norms_screed * (thickness / 10)",   unit="кг",  round_to=0),
-    CalculationRule(id="screed_fiber",        label="Фібра",              expression="floor_area * norms_fiber",                       unit="кг",  round_to=1),
+    CalculationRule(id="screed_fiber",        label="Фібра",              expression="floor_area * (thickness / 1000) * norms_fiber", unit="кг",  round_to=2),
     CalculationRule(id="lam_m2",              label="Ламінат",            expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
     CalculationRule(id="lam_sub_m2",          label="Підкладка",          expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
     CalculationRule(id="wallpaper_rl",        label="Шпалери",            expression="wall_area / norms_wallpaper_roll",               unit="рул", round_to=0),
@@ -77,7 +77,7 @@ DEFAULT_THICKNESS = {
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
-def calc(work: str, room: str, height: float = 2.7, thickness: int | None = None) -> dict:
+def calc(work: str, room: str, height: float = 2.7, thickness: int = None) -> dict:
     engine = RuleEngine()
     allowed_ids = WORK_RULES[work]
     rules = [r for r in ALL_RULES if r.id in allowed_ids]
@@ -229,7 +229,7 @@ class TestScreed:
         r = calc("стяжка підлоги", "4x5", thickness=50)
         floor_area = 4 * 5  # 20.0
         assert r["screed_kg"]["value"] == round(floor_area * 20.0 * (50 / 10))  # 2000 kg
-        assert r["screed_fiber"]["value"] == pytest.approx(floor_area * 0.6, abs=0.1)
+        assert r["screed_fiber"]["value"] == pytest.approx(floor_area * (50 / 1000) * 0.75, abs=0.01)
 
     def test_room_3x4_t40(self):
         r = calc("стяжка підлоги", "3x4", thickness=40)
@@ -246,10 +246,16 @@ class TestScreed:
         r100 = calc("стяжка підлоги", "4x5", thickness=100)
         assert r100["screed_kg"]["value"] == pytest.approx(r50["screed_kg"]["value"] * 2, abs=1)
 
-    def test_fiber_independent_of_thickness(self):
+    def test_fiber_proportional_to_thickness(self):
+        """Fiber now depends on thickness (volume-based)."""
         r50 = calc("стяжка підлоги", "4x5", thickness=50)
-        r70 = calc("стяжка підлоги", "4x5", thickness=70)
-        assert r50["screed_fiber"]["value"] == r70["screed_fiber"]["value"]
+        r100 = calc("стяжка підлоги", "4x5", thickness=100)
+        assert r100["screed_fiber"]["value"] == pytest.approx(r50["screed_fiber"]["value"] * 2, abs=0.01)
+
+    def test_fiber_real_example_3x3_t50(self):
+        """3x3 room, 50mm: 9 * 0.05 * 0.75 = 0.34 kg"""
+        r = calc("стяжка підлоги", "3x3", thickness=50)
+        assert r["screed_fiber"]["value"] == pytest.approx(9 * 0.05 * 0.75, abs=0.01)
 
     def test_units(self):
         r = calc("стяжка підлоги", "4x5")

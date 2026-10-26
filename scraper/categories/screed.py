@@ -1,3 +1,4 @@
+from typing import Optional
 # screed.py — scraper for Цементна стяжка (cement floor screed)
 #
 # Screed is sold in heavy bags measured in KG (usually 25 kg).
@@ -36,7 +37,7 @@ HEADER = [
 ]
 
 
-def normalize_price(row) -> float | None:
+def normalize_price(row) -> Optional[float]:
     """Calculate price per 1 kg."""
     if not row.package_size or row.package_size <= 0:
         return None
