@@ -1,26 +1,28 @@
 from typing import Optional
 # wallpaper.py — scraper for Шпалери (wallpaper)
 #
-# Wallpaper is sold per ROLL. Price is per roll (грн).
-# Each roll has a width and length — we can calculate m² per roll.
-# We normalize price to грн per M² so rolls of different sizes can be compared.
+# CHANGELOG:
+#   v2 (2026-10): roll_m2 extracted from product page characteristics
+#                 (Ширина рулону × Довжина рулону), NOT from product name.
+#                 price stays per roll (грн/рул), price_per_m2 used only for sorting.
+#                 Excluded: "Шпалери під фарбування", "Шпалери самоклейкі"
+#   v1 (original): stored weight_kg, sorted by price_per_roll
 #
-# m² per roll = roll_width_m × roll_length_m
-# price_per_m2 = price / m²_per_roll
-#
-# Problem: Epicentr doesn't always expose width/length as structured characteristics.
-# The scraper stores roll WEIGHT in kg (package_size). Width/length may be in the name.
-# If we can't calculate m² — we still show price per roll for reference.
+# HOW IT WORKS:
+#   - http_scraper._extract_pkg_from_chars() reads "Ширина рулону" and "Довжина рулону"
+#     from the product page and stores width × length as package_size (м²)
+#   - price = per roll (грн) — NOT converted to per-m²
+#   - price_per_unit = price / roll_m2 — used for sorting cheapest per m² first
+#     (fair comparison: 0.53m roll vs 1.06m roll)
 #
 # Example:
-#   Roll A: 207 грн, 0.53m × 10.05m = 5.33 m²  →  price_per_m2 = 207 / 5.33 = 38.8 грн/м²
-#   Roll B: 923 грн, 1.06m × 10.05m = 10.65 m² →  price_per_m2 = 923 / 10.65 = 86.7 грн/м²
-#   → Roll A is cheaper per m²
+#   Roll A: 144 грн, 0.53×10.05 = 5.33 m²  → price_per_m2 = 27.0 грн/м²
+#   Roll B: 830 грн, 1.06×10.05 = 10.65 m² → price_per_m2 = 77.9 грн/м²
+#   → Roll A is cheaper per m² despite lower absolute price
 #
 # Worksheet columns:
-#   item | price | price_unit | weight_kg | price_per_roll | source_name | source_url | collected_at | active | notes
+#   item | price | price_unit | roll_m2 | price_per_m2 | source_name | source_url | collected_at | active | notes
 #
-# Note: price_per_roll IS the normalized unit here since all rolls are sold individually.
 # To run just this category:
 #   python -m scraper run --category Шпалери
 
@@ -36,8 +38,8 @@ HEADER = [
     "item",
     "price",
     "price_unit",     # "грн" (per roll)
-    "roll_m2",        # m² per roll (width × length)
-    "price_per_m2",   # price / roll_m2 — used for sorting (cheapest per m² first)
+    "roll_m2",        # m² per roll = Ширина рулону × Довжина рулону
+    "price_per_m2",   # price / roll_m2 — for sorting (cheapest per m² first)
     "source_name",
     "source_url",
     "collected_at",
@@ -45,34 +47,20 @@ HEADER = [
     "notes",
 ]
 
-# Regex to extract roll dimensions from product name e.g. "1,06x10 м" or "0.53 x 10.05 m"
-import re as _re
-_ROLL_DIM_RE = _re.compile(
-    r'(\d+[.,]\d+)\s*[xXхХ×]\s*(\d+[.,]\d+)\s*м\b',
-    _re.IGNORECASE
-)
-
-
-def _roll_m2(item_name: str) -> Optional[float]:
-    """Extract m² per roll from product name dimensions."""
-    m = _ROLL_DIM_RE.search(item_name)
-    if m:
-        w = float(m.group(1).replace(',', '.'))
-        l = float(m.group(2).replace(',', '.'))
-        return round(w * l, 4)
-    return None
+# Items to exclude
+_EXCLUDE = ("Шпалери під фарбування", "Шпалери самоклейкі")
 
 
 def normalize_price(row) -> Optional[float]:
     """
-    Keep price per roll for display. Sort by price per m² for fair comparison.
-    price_per_unit = price_per_m2 for sorting, but row.price stays per roll.
+    Returns price per m² for sorting.
+    row.price stays as per-roll price for display.
     """
-    if row.price and row.price > 0:
-        if row.package_size and row.package_size > 0:
-            return round(row.price / row.package_size, 4)  # грн/м² for sorting
-        return round(row.price, 4)  # fallback
-    return None
+    if not row.price or row.price <= 0:
+        return None
+    if row.package_size and row.package_size > 0:
+        return round(row.price / row.package_size, 4)
+    return round(row.price, 4)  # fallback if roll_m2 not found
 
 
 def to_row(row) -> list:
@@ -81,7 +69,7 @@ def to_row(row) -> list:
         row.price,
         row.price_unit,
         row.package_size or "",   # roll_m2
-        row.price_per_unit or "", # price_per_roll
+        row.price_per_unit or "", # price_per_m2
         row.source_name,
         row.source_url,
         row.collected_at,
@@ -91,7 +79,7 @@ def to_row(row) -> list:
 
 
 async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
-    """Fetch all wallpaper products and calculate price_per_unit for each."""
+    """Fetch wallpaper products, exclude non-standard types, calculate price_per_m2."""
     adapter = GenericAIAdapter(
         source_name=SOURCE_NAME,
         base_url="https://epicentrk.ua",
@@ -99,11 +87,12 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
         kiro_key=kiro_key,
     )
     rows = await adapter.fetch(CATEGORY, URL)
+    rows = [r for r in rows if not r.item.startswith(_EXCLUDE)]
     for row in rows:
         row.price_per_unit = normalize_price(row)
     return rows
 
 
 def write(writer: SheetsWriter, rows: list) -> None:
-    """Write rows to the category worksheet, sorted by price_per_roll."""
+    """Write rows sorted by price_per_m2 (cheapest per m² first)."""
     writer.write_category_sheet(WORKSHEET, HEADER, rows, to_row)
