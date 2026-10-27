@@ -167,13 +167,7 @@ knowledge:
     стяжка підлоги: [floor_area, screed_kg, screed_fiber]
     ламінат: [floor_area, lam_m2, lam_sub_m2]
     поклейка шпалер: [wall_area, wallpaper_rl, wallpaper_glue]
-  faq:
-    - question: "Скільки сохне штукатурка?"
-      answer: "Залежно від шару та вологості — зазвичай від 1 до 2 діб."
-      keywords: ["сохне", "висихання", "сохнути"]
-    - question: "Чи потрібна ґрунтовка перед фарбуванням?"
-      answer: "Так, ґрунтовка покращує адгезію та зменшує витрати фарби."
-      keywords: ["ґрунтовка", "грунт", "перед фарбуванням"]
+  faq: []
 
 # 5. AI Policy
 ai_policy:

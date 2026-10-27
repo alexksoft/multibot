@@ -72,6 +72,7 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
     rows = await adapter.fetch(CATEGORY, URL)
     _EXCLUDE = ("PUFAS Ґрунтівка під шпалери Tapet-Grunt",)
     rows = [r for r in rows if not r.item.startswith(_EXCLUDE)]
+    rows = [r for r in rows if r.volume_l and r.volume_l >= 5]
     for row in rows:
         row.price_per_unit = normalize_price(row)
     return rows
