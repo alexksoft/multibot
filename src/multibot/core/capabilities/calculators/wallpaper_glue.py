@@ -12,17 +12,18 @@ logger = logging.getLogger(__name__)
 CATEGORY = "Клей для шпалер"
 
 
-def calculate(qty_packets: float, price_per_packet: float) -> dict:
+def calculate(qty_m2: float, price_per_packet: float, volume_l: float = None, coverage_m2: float = None) -> dict:
     if not price_per_packet or price_per_packet <= 0:
-        return {"packages": None, "qty_display": f"{qty_packets:g} пач", "total_price": None}
-    packages = math.ceil(round(qty_packets, 6))
+        return {"packages": None, "qty_display": f"{qty_m2:g} м²", "total_price": None}
+    coverage = coverage_m2 if coverage_m2 and coverage_m2 > 0 else 10.0
+    packages = math.ceil(round(qty_m2 / coverage * 1.1, 6))
     qty_display = f"{packages} пач"
     total_price = price_per_packet * packages
     return {"packages": packages, "qty_display": qty_display, "total_price": total_price}
 
 
 def can_calculate(rule_unit: str) -> bool:
-    return rule_unit == "пач"
+    return rule_unit in ("пач", "л", "м²")
 
 
 def load_items(creds_path: str, sheet_id: str) -> list:
@@ -41,13 +42,14 @@ def load_items(creds_path: str, sheet_id: str) -> list:
             try:
                 price = to_float(row.get("price"))
                 volume_l = to_float(row.get("volume_l"))
+                coverage_m2 = to_float(row.get("coverage_m2"))
                 result.append(CatalogItem(
                     category=CATEGORY, item=str(row.get("item", "")).strip(),
                     price=price, unit=str(row.get("price_unit", "грн")).strip(),
                     source_name=str(row.get("source_name", "")).strip() or None,
                     source_url=str(row.get("source_url", "")).strip() or None,
                     collected_at=str(row.get("collected_at", "")).strip() or None,
-                    package_size=1, package_unit="пач",
+                    package_size=coverage_m2, package_unit="м²" if coverage_m2 else None,
                     volume_l=volume_l,
                 ))
             except Exception as row_err:

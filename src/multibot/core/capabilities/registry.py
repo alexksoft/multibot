@@ -286,14 +286,24 @@ class PrepareRequest:
             lines.append(f"📏 {thickness_label}: {thickness} мм")
         if tier_label:
             lines.append(f"Клас: {tier_label}")
+##        if (work or "").lower() == "фарбування":
+##            lines.append("⚠️ Розрахунок для 1 шару фарби")
 
         # ── Quantities ───────────────────────────────────────────────────────
         if calc:
             lines.append("")
             lines.append("📐 Скільки потрібно")
             skip = ShoppingList._SKIP_RULES
+            _glue_area_rules = {"wallpaper_glue", "wallpaper_rl"}
             for rule_id, info in calc.items():
                 if rule_id in skip or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
+                    continue
+                if rule_id in _glue_area_rules:
+                    sh = (collected.get("_shopping_results") or {}).get(rule_id, {})
+                    packs = sh.get("packages")
+                    if packs:
+                        unit_lbl = "рул" if rule_id == "wallpaper_rl" else "пач"
+                        lines.append(f"• {info['label']}: {packs} {unit_lbl}")
                     continue
                 lines.append(f"• {info['label']}: {info['value']} {info['unit']}")
 
@@ -436,9 +446,10 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         subtitle_parts = [p for p in [
             work,
             f"Кімната {room}\u00a0м" if room else "",
-            f"висота сін {height}\u00a0м" if height and work.lower() not in ("ламінат", "стяжка підлоги") and not (work.lower() == "плитка" and (collected.get("tile_surface") or "").lower() == "підлога") else "",
+            f"висота стін {height}\u00a0м" if height and work.lower() not in ("ламінат", "стяжка підлоги") and not (work.lower() == "плитка" and (collected.get("tile_surface") or "").lower() == "підлога") else "",
             f"{thick_lbl_pdf} {thickness_pdf} мм" if thickness_pdf and thick_lbl_pdf else "",
             f"Клас: {tier_label}" if tier_label else "",
+##            "Розрахунок для 1 шару фарби" if (work or "").lower() == "фарбування" else "",
         ] if p]
 
         story = []
@@ -449,9 +460,17 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
         if calc:
             story.append(Paragraph("Скільки потрібно", h2_s))
             skip = ShoppingList._SKIP_RULES
+            _glue_area_rules = {"wallpaper_glue", "wallpaper_rl"}
             qty_rows = []
             for rule_id, info in calc.items():
                 if rule_id in skip or rule_id.endswith("_area") or rule_id.endswith("_perimeter"):
+                    continue
+                if rule_id in _glue_area_rules:
+                    sh = shopping.get(rule_id, {})
+                    packs = sh.get("packages") if isinstance(sh, dict) else None
+                    if packs:
+                        unit_lbl = "рул" if rule_id == "wallpaper_rl" else "пач"
+                        qty_rows.append([info["label"], f"{packs} {unit_lbl}"])
                     continue
                 qty_rows.append([info["label"], f"{info['value']} {info['unit']}"])
             if qty_rows:
@@ -534,8 +553,9 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
 
                 table_data.append([item_cell, qty_display, price_cell, sum_cell])
 
-                # remainder row
-                if packages and pkg_size and qty_needed:
+                # remainder row — skip for glue/adhesive categories
+                skip_remainder = (entry.get("label", "") or key).lower() in ("клей для шпалер", "клей")
+                if packages and pkg_size and qty_needed and not skip_remainder:
                     bought = packages * pkg_size
                     remainder = bought - qty_needed
                     if remainder > 0.01:

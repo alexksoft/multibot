@@ -12,15 +12,16 @@ logger = logging.getLogger(__name__)
 CATEGORY = "Шпалери"
 
 
-def calculate(qty_rolls: float, price_per_roll: float) -> dict:
-    packages = math.ceil(round(qty_rolls, 6))
+def calculate(qty_m2: float, price_per_roll: float, roll_m2: float = None) -> dict:
+    coverage = roll_m2 if roll_m2 and roll_m2 > 0 else 5.0
+    packages = math.ceil(round(qty_m2 / coverage * 1.3, 6))
     qty_display = f"{packages} рул"
     total_price = price_per_roll * packages
     return {"packages": packages, "qty_display": qty_display, "total_price": total_price}
 
 
 def can_calculate(rule_unit: str) -> bool:
-    return rule_unit == "рул"
+    return rule_unit in ("рул", "м²")
 
 
 def load_items(creds_path: str, sheet_id: str) -> list:

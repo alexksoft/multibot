@@ -28,7 +28,8 @@ HEADER = [
     "price",
     "price_unit",
     "volume_l",       # volume in liters per package
-    "price_per_l",    # price per liter — used for sorting
+    "coverage_m2",    # Витрата з однієї упаковки (кв. м) — used for package count
+    "price_per_m2",   # price / coverage_m2 — for sorting
     "source_name",
     "source_url",
     "collected_at",
@@ -38,21 +39,24 @@ HEADER = [
 
 
 def normalize_price(row) -> Optional[float]:
-    """Calculate price per 1 litre."""
-    vol = row.volume_l or (row.package_size if (row.package_unit or "").lower() == "л" else None)
-    if not vol or vol <= 0:
-        return None
-    return round(row.price / vol, 4)
+    """Calculate price per m² coverage for sorting."""
+    coverage = row.package_size if row.package_unit == "м²" else None
+    if coverage and coverage > 0 and row.price and row.price > 0:
+        return round(row.price / coverage, 4)
+    return None
 
 
 def to_row(row) -> list:
-    vol = row.volume_l or (row.package_size if (row.package_unit or "").lower() == "л" else None)
+    vol = row.volume_l
+    coverage = row.package_size if row.package_unit == "м²" else None
+    price_per_m2 = row.price_per_unit
     return [
         row.item,
         row.price,
         row.price_unit,
         vol or "",
-        row.price_per_unit or "",
+        coverage or "",
+        price_per_m2 or "",
         row.source_name,
         row.source_url,
         row.collected_at,
@@ -70,9 +74,10 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
         kiro_key=kiro_key,
     )
     rows = await adapter.fetch(CATEGORY, URL)
-    _EXCLUDE = ("PUFAS Ґрунтівка під шпалери Tapet-Grunt",)
+    _EXCLUDE = ("PUFAS Ґрунтівка під шпалери Tapet-Grunt", "Клей для склошпалер", "Клей для склополотна",)
     rows = [r for r in rows if not r.item.startswith(_EXCLUDE)]
-    rows = [r for r in rows if r.volume_l and r.volume_l >= 5]
+##    rows = [r for r in rows if r.volume_l and r.volume_l >= 5]
+    rows = [r for r in rows if r.coverage_m2]
     for row in rows:
         row.price_per_unit = normalize_price(row)
     return rows

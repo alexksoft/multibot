@@ -29,7 +29,7 @@ NORMS = {
     "norms_fiber":          0.75,
     "norms_lam_waste":      1.1,
     "norms_wallpaper_roll": 5.0,
-    "norms_wallpaper_glue": 25.0,
+    "norms_wallpaper_glue": 15.0,
 }
 
 # ── Rules from building.yaml ──────────────────────────────────────────────────
@@ -51,7 +51,7 @@ ALL_RULES = [
     CalculationRule(id="screed_fiber",        label="Фібра",              expression="floor_area * (thickness / 1000) * norms_fiber", unit="кг",  round_to=2),
     CalculationRule(id="lam_m2",              label="Ламінат",            expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
     CalculationRule(id="lam_sub_m2",          label="Підкладка",          expression="floor_area * norms_lam_waste",                   unit="м²",  round_to=1),
-    CalculationRule(id="wallpaper_rl",        label="Шпалери",            expression="wall_area / norms_wallpaper_roll",               unit="рул", round_to=0),
+    CalculationRule(id="wallpaper_rl",        label="Шпалери",            expression="wall_area / norms_wallpaper_roll * 1.1",               unit="рул", round_to=0),
     CalculationRule(id="wallpaper_glue",      label="Клей для шпалер",    expression="wall_area / norms_wallpaper_glue",               unit="пач", round_to=0),
 ]
 
@@ -303,7 +303,7 @@ class TestWallpaper:
         r = calc("поклейка шпалер", "4x5", height=2.7)
         wall_area = (4 + 5) * 2 * 2.7  # 48.6
         assert r["wallpaper_rl"]["value"] == round(wall_area / 5.0)   # 10 rolls
-        assert r["wallpaper_glue"]["value"] == round(wall_area / 25.0)  # 2 packs
+        assert r["wallpaper_glue"]["value"] == round(wall_area / 15.0)
 
     def test_room_3x4_h25(self):
         r = calc("поклейка шпалер", "3x4", height=2.5)
@@ -318,7 +318,7 @@ class TestWallpaper:
     def test_units(self):
         r = calc("поклейка шпалер", "4x5")
         assert r["wallpaper_rl"]["unit"] == "рул"
-        assert r["wallpaper_glue"]["unit"] == "пач"
+        assert r["wallpaper_glue"]["unit"] == "л"
 
 
 # ── Cross-cutting: work isolation ─────────────────────────────────────────────

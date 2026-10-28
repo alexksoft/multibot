@@ -100,6 +100,15 @@ def _extract_pkg_from_chars(chars: dict) -> tuple:
         package_unit = "м²"
         return package_size, package_unit, volume_l
 
+    # Priority 1c: coverage per package — Витрата з однієї упаковки (кв. м)
+    for key, val in chars.items():
+        kl = key.lower()
+        if "витрата" in kl and "упак" in kl:
+            m = _NUM_RE.search(val)
+            if m:
+                package_size, package_unit = _n(m.group(1)), "м²"
+                return package_size, package_unit, volume_l
+
     # Priority 2: фасування — actual packaging size
     for key, val in chars.items():
         if key.lower().startswith("фасування"):

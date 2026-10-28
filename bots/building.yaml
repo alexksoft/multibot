@@ -141,8 +141,8 @@ knowledge:
     - { id: screed_fiber, label: "Фібра",            expression: "floor_area * (thickness / 1000) * norms_fiber", unit: "кг", round_to: 2 }
     - { id: lam_m2,       label: "Ламінат",          expression: "floor_area * norms_lam_waste", unit: "м²", round_to: 1 }
     - { id: lam_sub_m2,   label: "Підкладка",        expression: "floor_area * norms_lam_waste", unit: "м²", round_to: 1 }
-    - { id: wallpaper_rl,  label: "Шпалери",         expression: "wall_area / norms_wallpaper_roll", unit: "рул", round_to: 0 }
-    - { id: wallpaper_glue, label: "Клей для шпалер", expression: "wall_area / norms_wallpaper_glue", unit: "пач", round_to: 0 }
+    - { id: wallpaper_rl,  label: "Шпалери",         expression: "wall_area", unit: "м²", round_to: 1 }
+    - { id: wallpaper_glue, label: "Клей для шпалер", expression: "wall_area", unit: "м²", round_to: 1 }
   norms:
     norms_plaster: 15.5
     norms_primer: 0.15
@@ -155,7 +155,7 @@ knowledge:
     norms_fiber: 0.75
     norms_lam_waste: 1.1
     norms_wallpaper_roll: 5.0
-    norms_wallpaper_glue: 25.0
+    norms_wallpaper_glue: 15.0
   work_rules:
     штукатурка: [wall_area, plaster_kg, primer_l]
     шпаклівка: [wall_area, putty_kg, primer_l]

@@ -88,12 +88,12 @@ def dispatch(
     # --- Шпалери ---
     elif mod is wallpaper:
         if mod.can_calculate(rule_unit):
-            return mod.calculate(qty, unit_price)
+            return mod.calculate(qty, unit_price, roll_m2=volume_l)
 
     # --- Клей для шпалер ---
     elif mod is wallpaper_glue:
         if mod.can_calculate(rule_unit):
-            return mod.calculate(qty, unit_price)
+            return mod.calculate(qty, unit_price, volume_l=volume_l, coverage_m2=pkg_size)
 
     # Fallback: unknown category or missing package data — show raw qty
     return {
