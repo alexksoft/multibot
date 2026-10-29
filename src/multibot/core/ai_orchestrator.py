@@ -13,6 +13,18 @@ from .providers.kiro_gateway import KiroGatewayProvider, FallbackProvider, Provi
 logger = logging.getLogger(__name__)
 
 
+def _md_to_html(text: str) -> str:
+    import re as _re
+    text = _re.sub(r'&', '&amp;', text)
+    text = _re.sub(r'<(?!/?(?:b|i|u|s|code|pre)\b)', '&lt;', text)
+    # Process bold+italic first, then bold, then italic — non-greedy, single-line only
+    text = _re.sub(r'\*\*\*([^*\n]+?)\*\*\*', r'<b><i>\1</i></b>', text)
+    text = _re.sub(r'\*\*([^*\n]+?)\*\*', r'<b>\1</b>', text)
+    text = _re.sub(r'\*([^*\n]+?)\*', r'<i>\1</i>', text)
+    text = _re.sub(r'`([^`]+?)`', r'<code>\1</code>', text)
+    return text
+
+
 def _append_to_index(question: str, answer: str, vector_faq) -> None:
     """Save Q&A to a temp file, append vector to index, delete temp file."""
     import time
@@ -116,7 +128,7 @@ class AIOrchestrator:
         faq = self._knowledge.match_faq(user_text)
         if faq:
             logger.info("[ai][step1] answered from vector/FAQ — skipping AI")
-            return faq.answer
+            return _md_to_html(faq.answer)
         logger.info("[ai][step1] not found in vector DB — proceeding to AI")
 
         # 3. LLM if enabled
@@ -164,6 +176,7 @@ class AIOrchestrator:
                 return "\n\n".join(responses)
 
         ai_answer = result.content or "Не вдалося отримати відповідь. Спробуйте ще раз."
+        ai_answer = _md_to_html(ai_answer)
         logger.info("[ai] Q=%r | A=%r", user_text[:80], ai_answer[:120])
 
         # Save to vector index in background — only if real AI answer, not fallback

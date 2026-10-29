@@ -66,7 +66,16 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
         send_text = message_or_query.reply_text
         send_doc = message_or_query.reply_document
 
-    await send_text(_safe_text(response.text), reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+    try:
+        await send_text(_safe_text(response.text), reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+    except Exception:
+        import re as _re
+        plain = _re.sub(r'<[^>]+>', '', response.text)
+        await send_text(_safe_text(plain), reply_markup=markup, disable_web_page_preview=True)
+    except Exception:
+        import re as _re
+        plain = _re.sub(r'<[^>]+>', '', response.text)
+        await send_text(_safe_text(plain), reply_markup=markup, disable_web_page_preview=True)
     if response.document:
         import io
         await send_doc(
@@ -160,7 +169,7 @@ class BotManager:
         async def _do_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await ctx.storage.clear_state(ctx.config.name, update.effective_user.id)
             profile = ctx.config.assistant_profile
-            text = _safe_text(f"👋 {profile.assistant_role}\n\nℹ️ {profile.disclaimer}")
+            text = _safe_text(f"{profile.assistant_role}\n\n{profile.disclaimer}")
             # Persistent restart keyboard
             await update.message.reply_text(text, reply_markup=_REPLY_KEYBOARD, parse_mode="HTML")
             # Inline menu

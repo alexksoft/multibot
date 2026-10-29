@@ -149,7 +149,12 @@ class FlowEngine:
             return self._menu_response()
 
         if text_lower.startswith("ask_ai:"):
+            await self._storage.clear_state(self._bot_name, user_id)
             cached = _ask_ai_cache.pop(text_stripped, None)
+            if not cached:
+                cached = _ask_ai_cache.pop(f"ask_ai:{user_id}", None)
+            logger.info("[ask_ai] user=%s key=%r cache_hit=%s cache_keys=%s",
+                        user_id, text_stripped, bool(cached), list(_ask_ai_cache.keys())[:5])
             if cached:
                 import re as _re
                 # Keep only the header + quantities block, drop the shopping list
@@ -332,22 +337,16 @@ class FlowEngine:
                     kb = next_resp.keyboard
                     if doc and result.text:
                         import re as _re
-                        plain = _re.sub(r"<[^>]+>", "", result.text)
+                        # Strip only emojis, keep HTML tags and URLs
+                        plain = _re.sub(r"[\U00010000-\U0010ffff\U00002600-\U000027BF\U0001F300-\U0001F9FF\u2022\u00a0]", " ", result.text)
+                        plain = _re.sub(r"\s{2,}", "\n", plain).strip()
                         state_key = f"ask_ai:{user_id}"
-                        _ask_ai_cache[state_key] = plain.strip() + "\n\nЦе результат розрахунку матеріалів. На основі цих даних (вид робіт, розміри кімнати, клас матеріалів) дай практичні поради: які інструменти потрібні, яка послідовність робіт, на що звернути увагу при виконанні цих робіт, типові помилки та як їх уникнути."
+                        _ask_ai_cache[state_key] = plain + "\n\nЦе результат розрахунку матеріалів. На основі цих даних (вид робіт, розміри кімнати, клас матеріалів) дай практичні поради: які інструменти потрібні, яка послідовність робіт, на що звернути увагу, типові помилки та як їх уникнути."
                         kb = [[("💥 Запитати експерта по матеріалах 💥", state_key)]] + kb
                     return BotResponse(combined, kb, doc, doc_name)
             await self._storage.clear_state(self._bot_name, user_id)
             if result.document:
-                kb = _menu_keyboard(self._flows)
-                if result.text:
-                    import re as _re
-                    plain = _re.sub(r"<[^>]+>", "", result.text)
-                    state_key = f"ask_ai:{user_id}"
-                    # store in collected so handle() can retrieve it
-                    _ask_ai_cache[state_key] = plain.strip() + "\n\nпоясни докладніше про ці матеріали"
-                    kb = [[("🤖 Запитати AI про матеріали", state_key)]] + kb
-                return BotResponse(result.text, keyboard=kb,
+                return BotResponse(result.text, keyboard=_menu_keyboard(self._flows),
                                    document=result.document, document_name=result.document_name)
             return BotResponse(result.text, keyboard=_menu_keyboard(self._flows))
 

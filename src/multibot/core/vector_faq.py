@@ -8,7 +8,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_THRESHOLD = 0.85   # cosine similarity minimum
+_THRESHOLD = 0.93   # cosine similarity minimum
 _INDEX_FILE = "faq_index.npz"
 _MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"
 
