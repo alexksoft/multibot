@@ -66,7 +66,7 @@ async def _send_response(message_or_query, response: BotResponse, is_callback: b
         send_text = message_or_query.reply_text
         send_doc = message_or_query.reply_document
 
-    await send_text(_safe_text(response.text), reply_markup=markup, parse_mode="HTML")
+    await send_text(_safe_text(response.text), reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
     if response.document:
         import io
         await send_doc(
