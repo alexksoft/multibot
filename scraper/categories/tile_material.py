@@ -78,7 +78,7 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
     )
     rows = await adapter.fetch(CATEGORY, URL)
     # Exclude non-tile items
-    _EXCLUDE = ("3D панель", "3D-панель")
+    _EXCLUDE = ("3D панель", "3D-панель", "Панель самоклеюча декоративна 3D")
     rows = [r for r in rows if not r.item.startswith(_EXCLUDE)]
     for row in rows:
         row.price_per_unit = normalize_price(row)

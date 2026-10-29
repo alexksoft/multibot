@@ -554,7 +554,7 @@ def _build_pdf(collected: dict, calc: dict, shopping: dict) -> bytes:
                 table_data.append([item_cell, qty_display, price_cell, sum_cell])
 
                 # remainder row — skip for glue/adhesive categories
-                skip_remainder = (entry.get("label", "") or key).lower() in ("клей для шпалер", "клей")
+                skip_remainder = (entry.get("label", "") or key).lower() in ("клей для шпалер", "клей", "фарба")
                 if packages and pkg_size and qty_needed and not skip_remainder:
                     bought = packages * pkg_size
                     remainder = bought - qty_needed

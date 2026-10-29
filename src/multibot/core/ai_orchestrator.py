@@ -168,7 +168,8 @@ class AIOrchestrator:
 
         # Save to vector index in background — only if real AI answer, not fallback
         _FALLBACK_PHRASES = ("тимчасово недоступний", "не вдалося отримати", "Вибачте, AI")
-        if result.content and not any(p in result.content for p in _FALLBACK_PHRASES):
+        _SKIP_INDEX_PHRASES = ("🎨", "📐 Скільки", "Це результат розрахунку матеріалів")
+        if result.content and not any(p in result.content for p in _FALLBACK_PHRASES) and not any(p in user_text for p in _SKIP_INDEX_PHRASES):
             loop = asyncio.get_running_loop()
             loop.run_in_executor(
                 None, _append_to_index, user_text, result.content, self._vector_faq

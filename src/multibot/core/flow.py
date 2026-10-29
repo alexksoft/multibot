@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SESSION_TIMEOUT_SECONDS = 3600
+_ask_ai_cache: dict[str, str] = {}
 
 
 @dataclass
@@ -146,6 +147,25 @@ class FlowEngine:
         if text_lower in self._cancel_commands:
             await self._storage.clear_state(self._bot_name, user_id)
             return self._menu_response()
+
+        if text_lower.startswith("ask_ai:"):
+            cached = _ask_ai_cache.pop(text_stripped, None)
+            if cached:
+                import re as _re
+                # Keep only the header + quantities block, drop the shopping list
+                # to avoid hitting token limits with long product URLs
+                lines = cached.split("\n")
+                trimmed_lines = []
+                in_shopping = False
+                for line in lines:
+                    if line.strip().startswith("🛍") or line.strip().startswith("🯧") or line.strip().startswith("💰") or line.strip().startswith("➕") or line.strip().startswith("🏦"):
+                        in_shopping = True
+                    if not in_shopping:
+                        trimmed_lines.append(line)
+                trimmed = "\n".join(trimmed_lines).strip()
+                ai_text = await self._ai.respond(trimmed, [], {})
+                return BotResponse(ai_text, keyboard=_menu_keyboard(self._flows))
+            return BotResponse("Вибачте, сесія застаріла. Спробуйте знову.", keyboard=_menu_keyboard(self._flows))
 
         state = await self._storage.get_state(self._bot_name, user_id)
 
@@ -309,10 +329,25 @@ class FlowEngine:
                     # Keep document from whichever step produced it
                     doc = next_resp.document or result.document
                     doc_name = next_resp.document_name if next_resp.document else result.document_name
-                    return BotResponse(combined, next_resp.keyboard, doc, doc_name)
+                    kb = next_resp.keyboard
+                    if doc and result.text:
+                        import re as _re
+                        plain = _re.sub(r"<[^>]+>", "", result.text)
+                        state_key = f"ask_ai:{user_id}"
+                        _ask_ai_cache[state_key] = plain.strip() + "\n\nЦе результат розрахунку матеріалів. На основі цих даних (вид робіт, розміри кімнати, клас матеріалів) дай практичні поради: які інструменти потрібні, яка послідовність робіт, на що звернути увагу при виконанні цих робіт, типові помилки та як їх уникнути."
+                        kb = [[("💥 Запитати експерта по матеріалах 💥", state_key)]] + kb
+                    return BotResponse(combined, kb, doc, doc_name)
             await self._storage.clear_state(self._bot_name, user_id)
             if result.document:
-                return BotResponse(result.text, keyboard=_menu_keyboard(self._flows),
+                kb = _menu_keyboard(self._flows)
+                if result.text:
+                    import re as _re
+                    plain = _re.sub(r"<[^>]+>", "", result.text)
+                    state_key = f"ask_ai:{user_id}"
+                    # store in collected so handle() can retrieve it
+                    _ask_ai_cache[state_key] = plain.strip() + "\n\nпоясни докладніше про ці матеріали"
+                    kb = [[("🤖 Запитати AI про матеріали", state_key)]] + kb
+                return BotResponse(result.text, keyboard=kb,
                                    document=result.document, document_name=result.document_name)
             return BotResponse(result.text, keyboard=_menu_keyboard(self._flows))
 

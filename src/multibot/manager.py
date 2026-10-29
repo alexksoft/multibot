@@ -36,13 +36,21 @@ _REPLY_KEYBOARD = ReplyKeyboardMarkup(
 )
 
 
-def _make_reply_markup(keyboard: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup | None:
+def _make_reply_markup(keyboard: list[list[tuple]]) -> InlineKeyboardMarkup | None:
     if not keyboard:
         return None
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(label, callback_data=data) for label, data in row]
-        for row in keyboard
-    ])
+    rows = []
+    for row in keyboard:
+        btns = []
+        for item in row:
+            label, data = item[0], item[1]
+            btn_type = item[2] if len(item) > 2 else "callback"
+            if btn_type == "switch":
+                btns.append(InlineKeyboardButton(label, switch_inline_query_current_chat=data))
+            else:
+                btns.append(InlineKeyboardButton(label, callback_data=data))
+        rows.append(btns)
+    return InlineKeyboardMarkup(rows)
 
 
 def _safe_text(text: str) -> str:

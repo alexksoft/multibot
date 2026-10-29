@@ -49,7 +49,7 @@ class GroqProvider:
         system: str,
         messages: list[dict],
         model: str | None = None,
-        max_tokens: int = 600,
+        max_tokens: int = 2000,
         tools: list[dict] | None = None,
     ) -> ProviderResult:
         if not self._api_key:
@@ -102,7 +102,7 @@ class KiroGatewayProvider:
         system: str,
         messages: list[dict],
         model: str | None = None,
-        max_tokens: int = 600,
+        max_tokens: int = 2000,
         tools: list[dict] | None = None,
     ) -> ProviderResult:
         if not self._base_url or not self._api_key:
