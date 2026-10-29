@@ -1,0 +1,17 @@
+[Unit]
+Description=Facebook Group Scraper Agent
+After=network.target
+
+[Service]
+User=opc
+WorkingDirectory=/home/opc/marketing_multibot_telegram
+Environment="PYTHONPATH=/home/opc/marketing_multibot_telegram/.venv/lib/python3.9/site-packages"
+EnvironmentFile=/etc/multibot.env
+ExecStart=/usr/bin/python3 -m agents.facebook.scheduler
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

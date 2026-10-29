@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Facebook Agent{% endblock %}
+{% block content %}
+<h2>Facebook Group Scraper</h2>
+
+{% if msg %}
+<div class="alert alert-info">{{ msg }}</div>
+{% endif %}
+
+<!-- Add group -->
+<div class="card mb-4">
+  <div class="card-header">Add Facebook Group</div>
+  <div class="card-body">
+    <form method="post" action="/facebook/add" class="row g-2">
+      <div class="col-md-6">
+        <input type="url" name="url" class="form-control" placeholder="https://www.facebook.com/groups/..." required>
+      </div>
+      <div class="col-md-4">
+        <input type="text" name="name" class="form-control" placeholder="Group name (optional)">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100">Add</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Groups list -->
+<div class="card mb-4">
+  <div class="card-header">Groups ({{ groups|length }})</div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>#</th><th>Name</th><th>URL</th><th>Status</th><th>Added</th><th></th></tr></thead>
+      <tbody>
+      {% for g in groups %}
+      <tr class="{{ 'table-secondary' if not g.active }}">
+        <td>{{ g.id }}</td>
+        <td>{{ g.name or '—' }}</td>
+        <td><a href="{{ g.url }}" target="_blank" rel="noopener">{{ g.url[:60] }}{% if g.url|length > 60 %}…{% endif %}</a></td>
+        <td>
+          <form method="post" action="/facebook/toggle" class="d-inline">
+            <input type="hidden" name="group_id" value="{{ g.id }}">
+            <button class="btn btn-sm {{ 'btn-success' if g.active else 'btn-secondary' }}">
+              {{ 'Active' if g.active else 'Paused' }}
+            </button>
+          </form>
+        </td>
+        <td>{{ g.added_at[:10] }}</td>
+        <td>
+          <form method="post" action="/facebook/remove" class="d-inline"
+                onsubmit="return confirm('Remove this group?')">
+            <input type="hidden" name="group_id" value="{{ g.id }}">
+            <button class="btn btn-sm btn-danger">✕</button>
+          </form>
+          <a href="/facebook/posts?group_id={{ g.id }}" class="btn btn-sm btn-outline-primary">Posts</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-muted">No groups added yet</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Run now -->
+<div class="card mb-4">
+  <div class="card-header">Manual Run</div>
+  <div class="card-body">
+    <form method="post" action="/facebook/run">
+      <button class="btn btn-warning">▶ Run scraper now</button>
+      <small class="text-muted ms-2">Scrapes all active groups immediately</small>
+    </form>
+  </div>
+</div>
+
+<!-- Recent posts -->
+<div class="card">
+  <div class="card-header">Recent Posts (last 20)</div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Group</th><th>Text</th><th>Image</th><th>Scraped</th></tr></thead>
+      <tbody>
+      {% for p in posts %}
+      <tr>
+        <td><small>{{ p.group_name or p.group_url[:30] }}</small></td>
+        <td><small>{{ (p.post_text or '')[:120] }}{% if p.post_text and p.post_text|length > 120 %}…{% endif %}</small></td>
+        <td>{% if p.image_url %}<a href="{{ p.image_url }}" target="_blank" rel="noopener">🖼</a>{% endif %}</td>
+        <td><small>{{ p.scraped_at[:16] }}</small></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center text-muted">No posts yet</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

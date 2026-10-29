@@ -369,3 +369,57 @@ async def run_scraper(
         "errors": errors,
     }
     return templates.TemplateResponse("scraper_result.html", {"request": request, "result": result})
+
+
+# ── Facebook Agent routes ─────────────────────────────────────────────────────
+
+@app.get("/facebook", response_class=HTMLResponse)
+async def facebook_page(request: Request, _=Depends(require_session)):
+    from agents.facebook.db import init_db, list_groups, list_posts
+    init_db()
+    return templates.TemplateResponse("facebook.html", {
+        "request": request, "groups": list_groups(), "posts": list_posts(limit=20), "msg": ""
+    })
+
+
+@app.post("/facebook/add")
+async def facebook_add(request: Request, url: str = Form(...), name: str = Form(""), _=Depends(require_session)):
+    from agents.facebook.db import add_group
+    add_group(url.strip(), name.strip())
+    return RedirectResponse("/facebook", status_code=302)
+
+
+@app.post("/facebook/remove")
+async def facebook_remove(request: Request, group_id: int = Form(...), _=Depends(require_session)):
+    from agents.facebook.db import remove_group
+    remove_group(group_id)
+    return RedirectResponse("/facebook", status_code=302)
+
+
+@app.post("/facebook/toggle")
+async def facebook_toggle(request: Request, group_id: int = Form(...), _=Depends(require_session)):
+    from agents.facebook.db import toggle_group
+    toggle_group(group_id)
+    return RedirectResponse("/facebook", status_code=302)
+
+
+@app.get("/facebook/posts", response_class=HTMLResponse)
+async def facebook_posts(request: Request, group_id: int = 0, _=Depends(require_session)):
+    from agents.facebook.db import list_posts, list_groups
+    return templates.TemplateResponse("facebook.html", {
+        "request": request, "groups": list_groups(),
+        "posts": list_posts(group_id=group_id or None, limit=100), "msg": ""
+    })
+
+
+@app.post("/facebook/run", response_class=HTMLResponse)
+async def facebook_run(request: Request, _=Depends(require_session)):
+    from agents.facebook.scraper import run_all_groups
+    from agents.facebook.db import list_groups, list_posts
+    results = await run_all_groups()
+    msg = f"Done: {results['scraped']} groups, {results['posts']} posts saved."
+    if results['errors']:
+        msg += f" Errors: {'; '.join(results['errors'][:3])}"
+    return templates.TemplateResponse("facebook.html", {
+        "request": request, "groups": list_groups(), "posts": list_posts(limit=20), "msg": msg
+    })
