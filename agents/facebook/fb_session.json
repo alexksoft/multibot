@@ -21,7 +21,7 @@
     {
       "domain": ".facebook.com",
       "name": "fr",
-      "value": "1By26cZM4MPKCeKvO.AWe4-SaSzxw4eXDRl2aumtpxvAhmjPqEVwtPrmZkrnpM_a5siwE.Bq43aa..AAA.0.0.Bq43aa.AWfFSJn3-10pPfNxmfFLljgDalA",
+      "value": "1vs0dekYyKDac8xJC.AWdl0kfcirXMfjhHuCk6EN4axZfk18sGadwLQ73EPKvCCVmCKh0.Bq49yU..AAA.0.0.Bq49yU.AWcROCP3GJmLXOqAobzSM89JTCk",
       "path": "/",
       "secure": true,
       "httpOnly": true,
@@ -30,7 +30,7 @@
     {
       "domain": ".facebook.com",
       "name": "xs",
-      "value": "7%3A8IeUWWUWiDJRlA%3A2%3A1793291928%3A-1%3A-1%3A%3AAc2N5T5NU1KMkDsm6jmFov7cb5H6JSK3RIlZ26J1VQ",
+      "value": "39%3AwoZ3gjT41Vp20g%3A2%3A1793318031%3A-1%3A-1%3A%3AAc3WO_I1OZZ4ttH11f5dVIP5gNSorYV3xkzuVJTbEw",
       "path": "/",
       "secure": true,
       "httpOnly": true,
@@ -48,7 +48,7 @@
     {
       "domain": ".facebook.com",
       "name": "presence",
-      "value": "C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1793291930606%2C%22v%22%3A1%7D",
+      "value": "C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1793318036361%2C%22v%22%3A1%7D",
       "path": "/",
       "secure": true,
       "httpOnly": false,
