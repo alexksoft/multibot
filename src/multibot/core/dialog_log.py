@@ -26,13 +26,17 @@ def _get_worksheet(sheet_id: str, creds_path: str, ws_name: str):
         spreadsheet = gc.open_by_key(sheet_id)
         try:
             ws = spreadsheet.worksheet(ws_name)
-            # Ensure new columns exist in header
+            # Migrate header if columns are missing
             existing = ws.row_values(1)
-            for col in _HEADER:
-                if col not in existing:
-                    ws.insert_cols([[col]], col=len(existing) + 1)
-                    existing.append(col)
-        except Exception:
+            if existing != _HEADER:
+                # Insert missing columns before the old ones by rewriting row 1
+                ws.update("A1", [_HEADER])
+                # Shift old data columns: old had 7 cols, new has 10
+                # We need to insert 3 blank columns after user_id (col C) for first_name/last_name/username
+                if len(existing) == 7 and existing[2] == "user_id" and existing[3] == "direction":
+                    ws.insert_cols([[""], [""], [""]], col=4)  # insert 3 empty cols at D
+                    ws.update("A1", [_HEADER])  # rewrite header after insert
+        except gspread.exceptions.WorksheetNotFound:
             ws = spreadsheet.add_worksheet(title=ws_name, rows=1000, cols=len(_HEADER))
             ws.append_row(_HEADER)
         _ws_cache[key] = ws
