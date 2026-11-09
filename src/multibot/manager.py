@@ -5,7 +5,7 @@ from functools import partial
 
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    ReplyKeyboardMarkup, KeyboardButton, BotCommand, InputFile,
+    ReplyKeyboardMarkup, KeyboardButton, BotCommand, InputFile, CopyTextButton,
 )
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -47,6 +47,8 @@ def _make_reply_markup(keyboard: list[list[tuple]]) -> InlineKeyboardMarkup | No
             btn_type = item[2] if len(item) > 2 else "callback"
             if btn_type == "switch":
                 btns.append(InlineKeyboardButton(label, switch_inline_query_current_chat=data))
+            elif btn_type == "copy":
+                btns.append(InlineKeyboardButton(label, copy_text=CopyTextButton(text=data)))
             else:
                 btns.append(InlineKeyboardButton(label, callback_data=data))
         rows.append(btns)

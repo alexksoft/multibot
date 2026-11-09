@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 SESSION_TIMEOUT_SECONDS = 3600
 _ask_ai_cache: dict[str, str] = {}
-_copy_calc_cache: dict[str, str] = {}
 
 
 @dataclass
@@ -105,67 +104,53 @@ def _suggestion_keyboard(suggestions: list[str]) -> list[list[tuple[str, str]]]:
 
 
 def _build_copy_text(collected: dict) -> str:
-    """Build plain-text copy of the calculation in the required format."""
-    import re as _re
+    """Build compact plain-text (≤256 chars) for CopyTextButton."""
     work = collected.get("work", "")
     room = collected.get("room", "")
     height = collected.get("height", "")
-    tier = (collected.get("price_tier") or "").lower()
     thickness = collected.get("thickness", "")
     shopping: dict = collected.get("_shopping_results") or {}
 
     _floor_only = work.lower() in ("ламінат", "стяжка підлоги") or (
         work.lower() == "плитка" and (collected.get("tile_surface") or "").lower() == "підлога"
     )
-    _THICKNESS_LABEL = {
-        "штукатурка": "шар",
-        "шпаклівка": "шар",
-        "стяжка підлоги": "товщина стяжки",
-    }
-    thick_lbl = _THICKNESS_LABEL.get(work.lower(), "")
 
-    # Header line: /Штукатурка стін (шар 10мм)/
-    header_parts = [work]
-    if thick_lbl and thickness:
-        header_parts.append(f"{thick_lbl} {thickness}мм")
-    header = "/" + " ".join(header_parts) + "/"
+    # Line 1: /БудПомічник/
+    # Line 2: work + thickness
+    work_line = work
+    if thickness:
+        work_line += f" {thickness}мм"
 
-    # Params line
-    params_parts = []
-    if room:
-        if height and not _floor_only:
-            params_parts.append(f"кімната {room}м, стіни {height}м")
-        else:
-            params_parts.append(f"кімната {room}м")
-    if tier:
-        params_parts.append(tier)
-    params_line = "Параметри об'єкта: " + ", ".join(params_parts) + "." if params_parts else ""
+    # Line 3: room params + wall area
+    calc = collected.get("_calc_results") or {}
+    wall_area = calc.get("wall_area", {}).get("value", "")
+    floor_area = calc.get("floor_area", {}).get("value", "")
+    area_val = floor_area if _floor_only else wall_area
+    if room and height and not _floor_only:
+        params_line = f"Кімната {room} стіни {height}м" + (f" ({area_val}м2)" if area_val else "")
+    elif room:
+        params_line = f"Кімната {room}" + (f" ({area_val}м2)" if area_val else "")
+    else:
+        params_line = ""
 
-    # Source names
+    # Items: short format  N.NAME pkg-qty
     sources = sorted({v["source_name"] for v in shopping.values()
                       if isinstance(v, dict) and v.get("source_name")})
-    src_str = ", ".join(sources) if sources else "каталог"
+    src_str = ", ".join(sources) if sources else ""
 
-    lines = [header, ""]
-    if params_line:
-        lines.append(params_line)
-    lines.append(f"розрахунок БудПомічник за цінами в {src_str}:")
-    lines.append(f"Результати розрахунку матеріалів за базою {src_str}:")
-
-    total_val = 0.0
     items_list = [(k, v) for k, v in shopping.items() if k != "_total" and isinstance(v, dict)]
-    for _, entry in items_list:
-        item_name = entry.get("item_name", entry.get("label", ""))
+    item_lines = []
+    total_val = 0.0
+    for idx, (_, entry) in enumerate(items_list, 1):
+        name = entry.get("item_name") or entry.get("label", "")
         packages = entry.get("packages")
         unit_price = entry.get("unit_price", 0.0)
-        qty_display = entry.get("qty_display", "")
-        price_str = entry.get("price_str", "")
         if packages and unit_price:
-            row_total = packages * unit_price
-            total_val += row_total
-            lines.append(f"• {item_name} — необхідно {packages} шт на суму {row_total:g}.")
+            total_val += packages * unit_price
+            item_lines.append(f"{idx}.{name}-{packages}шт")
         else:
-            lines.append(f"• {item_name} — {qty_display} {price_str}.")
+            qty_display = entry.get("qty_display", "")
+            item_lines.append(f"{idx}.{name}-{qty_display}")
 
     total_str = shopping.get("_total", "")
     if total_str:
@@ -173,15 +158,23 @@ def _build_copy_text(collected: dict) -> str:
             total_val = float(total_str.replace("\u00a0", "").replace(" ", ""))
         except ValueError:
             pass
-    if total_val:
-        reserve_val = total_val * 10 / 100
-        grand_val = total_val + reserve_val
-        lines.append("")
-        lines.append(f"Загальна вартість матеріалів за специфікацією становить {int(total_val)}.")
-        lines.append(f"Технічний резерв системи на залишки та підрізку 10% становить {int(reserve_val)}.")
-        lines.append(f"Разом повний кошторис закупівлі: {int(grand_val)}.")
 
-    return "\n".join(lines)
+    lines = ["/БудПомічник/", work_line]
+    if params_line:
+        lines.append(params_line)
+    lines.append("")
+    lines.extend(item_lines)
+    if total_val:
+        reserve_val = round(total_val * 0.1, 2)
+        grand_val = round(total_val + reserve_val, 2)
+        src_label = f"Ціна({src_str}): " if src_str else "Ціна: "
+        lines.append(f"{src_label}{total_val:.2f}")
+        lines.append(f"+10%: {reserve_val:.2f}")
+        lines.append(f"Разом: {grand_val:.2f}")
+
+    text = "\n".join(lines)
+    # Telegram CopyTextButton limit is 256 chars
+    return text[:256]
 
 
 class FlowEngine:
@@ -228,14 +221,6 @@ class FlowEngine:
         if text_lower in self._cancel_commands:
             await self._storage.clear_state(self._bot_name, user_id)
             return self._menu_response()
-
-        if text_lower.startswith("copy_calc:"):
-            cached = _copy_calc_cache.pop(text_stripped, None)
-            if not cached:
-                cached = _copy_calc_cache.pop(f"copy_calc:{user_id}", None)
-            if cached:
-                return BotResponse(f"<code>{cached}</code>", keyboard=_menu_keyboard(self._flows))
-            return BotResponse("Вибачте, сесія застаріла. Спробуйте знову.", keyboard=_menu_keyboard(self._flows))
 
         if text_lower.startswith("ask_ai:"):
             await self._storage.clear_state(self._bot_name, user_id)
@@ -431,10 +416,9 @@ class FlowEngine:
                         plain = _re.sub(r"\s{2,}", "\n", plain).strip()
                         state_key = f"ask_ai:{user_id}"
                         _ask_ai_cache[state_key] = plain + "\n\nЦе результат розрахунку матеріалів. На основі цих даних (вид робіт, розміри кімнати, клас матеріалів) дай практичні поради: які інструменти потрібні, яка послідовність робіт, на що звернути увагу, типові помилки та як їх уникнути."
-                        copy_key = f"copy_calc:{user_id}"
-                        _copy_calc_cache[copy_key] = _build_copy_text(state.collected)
+                        copy_text = _build_copy_text(state.collected)
                         kb = [[("💥 Запитати експерта по матеріалах 💥", state_key)],
-                              [("📋 Скопіювати розрахунок", copy_key)]] + kb
+                              [("📋 Скопіювати розрахунок", copy_text, "copy")]] + kb
                     return BotResponse(combined, kb, doc, doc_name)
             await self._storage.clear_state(self._bot_name, user_id)
             if result.document:
