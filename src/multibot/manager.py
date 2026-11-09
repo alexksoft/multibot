@@ -28,6 +28,24 @@ from .core.storage import Storage
 
 logger = logging.getLogger(__name__)
 
+_user_info_cache: dict[int, dict] = {}  # user_id -> {first_name, last_name, username}
+
+
+async def _get_user_info(bot, user_id: int) -> dict:
+    if user_id in _user_info_cache:
+        return _user_info_cache[user_id]
+    try:
+        chat = await bot.get_chat(user_id)
+        info = {
+            "first_name": chat.first_name or "",
+            "last_name": chat.last_name or "",
+            "username": chat.username or "",
+        }
+    except Exception:
+        info = {"first_name": "", "last_name": "", "username": ""}
+    _user_info_cache[user_id] = info
+    return info
+
 RESTART_BUTTON = "\U0001f504 Почати спочатку"
 _REPLY_KEYBOARD = ReplyKeyboardMarkup(
     [[KeyboardButton(RESTART_BUTTON)]],
@@ -201,15 +219,16 @@ class BotManager:
         async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id = update.effective_user.id
             text = update.message.text or ""
-            # Persistent restart button
             if text == RESTART_BUTTON:
                 await _do_start(update, context)
                 return
+            info = await _get_user_info(context.bot, user_id)
             log_message(
                 ctx.config.name, user_id, "in", text,
                 enabled=self._settings.dialog_log_enabled,
                 sheet_id=self._settings.dialog_log_sheet,
                 creds_path=self._settings.google_creds_path,
+                **info,
             )
             try:
                 response = await _with_typing(
@@ -225,6 +244,7 @@ class BotManager:
                 enabled=self._settings.dialog_log_enabled,
                 sheet_id=self._settings.dialog_log_sheet,
                 creds_path=self._settings.google_creds_path,
+                **info,
             )
 
         async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -232,11 +252,13 @@ class BotManager:
             await query.answer()
             user_id = query.from_user.id
             data = query.data or ""
+            info = await _get_user_info(context.bot, user_id)
             log_message(
                 ctx.config.name, user_id, "in", data,
                 enabled=self._settings.dialog_log_enabled,
                 sheet_id=self._settings.dialog_log_sheet,
                 creds_path=self._settings.google_creds_path,
+                **info,
             )
             try:
                 response = await _with_typing(
@@ -263,6 +285,7 @@ class BotManager:
                 enabled=self._settings.dialog_log_enabled,
                 sheet_id=self._settings.dialog_log_sheet,
                 creds_path=self._settings.google_creds_path,
+                **info,
             )
 
         async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):

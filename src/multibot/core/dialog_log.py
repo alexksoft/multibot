@@ -6,7 +6,7 @@ from threading import Thread
 
 logger = logging.getLogger(__name__)
 
-_HEADER = ["timestamp", "bot_name", "user_id", "direction", "flow_id", "step_id", "text"]
+_HEADER = ["timestamp", "bot_name", "user_id", "first_name", "last_name", "username", "direction", "flow_id", "step_id", "text"]
 _ws_cache: dict[str, object] = {}
 
 
@@ -26,6 +26,12 @@ def _get_worksheet(sheet_id: str, creds_path: str, ws_name: str):
         spreadsheet = gc.open_by_key(sheet_id)
         try:
             ws = spreadsheet.worksheet(ws_name)
+            # Ensure new columns exist in header
+            existing = ws.row_values(1)
+            for col in _HEADER:
+                if col not in existing:
+                    ws.insert_cols([[col]], col=len(existing) + 1)
+                    existing.append(col)
         except Exception:
             ws = spreadsheet.add_worksheet(title=ws_name, rows=1000, cols=len(_HEADER))
             ws.append_row(_HEADER)
@@ -37,12 +43,15 @@ def _get_worksheet(sheet_id: str, creds_path: str, ws_name: str):
 
 
 def _write(bot_name: str, user_id: int, direction: str, text: str,
-           flow_id: str, step_id: str, sheet_id: str, creds_path: str) -> None:
+           flow_id: str, step_id: str, sheet_id: str, creds_path: str,
+           first_name: str = "", last_name: str = "", username: str = "") -> None:
     try:
         ws = _get_worksheet(sheet_id, creds_path, f"log_{bot_name}")
         if ws is None:
             return
-        ws.append_row([_utcnow(), bot_name, str(user_id), direction, flow_id, step_id, text[:500]])
+        ws.append_row([_utcnow(), bot_name, str(user_id),
+                       first_name, last_name, username,
+                       direction, flow_id, step_id, text[:500]])
     except Exception as e:
         logger.warning(f"[dialog_log] skip ({bot_name}): {e}")
 
@@ -58,11 +67,15 @@ def log_message(
     enabled: bool = True,
     sheet_id: str = "",
     creds_path: str = "",
+    first_name: str = "",
+    last_name: str = "",
+    username: str = "",
 ) -> None:
     if not enabled:
         return
     Thread(
         target=_write,
-        args=(bot_name, user_id, direction, text, flow_id, step_id, sheet_id, creds_path),
+        args=(bot_name, user_id, direction, text, flow_id, step_id, sheet_id, creds_path,
+              first_name, last_name, username),
         daemon=True,
     ).start()
