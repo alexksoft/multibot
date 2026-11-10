@@ -143,6 +143,7 @@ def _build_copy_text(collected: dict) -> str:
     total_val = 0.0
     for idx, (_, entry) in enumerate(items_list, 1):
         name = entry.get("item_name") or entry.get("label", "")
+        name = " ".join(name.split()[:3])
         packages = entry.get("packages")
         unit_price = entry.get("unit_price", 0.0)
         if packages and unit_price:
@@ -159,7 +160,7 @@ def _build_copy_text(collected: dict) -> str:
         except ValueError:
             pass
 
-    lines = ["/БудПомічник/", work_line]
+    lines = ["Розрахунок БудПомічник v2.4", work_line]
     if params_line:
         lines.append(params_line)
     lines.append("")
@@ -168,9 +169,9 @@ def _build_copy_text(collected: dict) -> str:
         reserve_val = round(total_val * 0.1, 2)
         grand_val = round(total_val + reserve_val, 2)
         src_label = f"Ціна({src_str}): " if src_str else "Ціна: "
-        lines.append(f"{src_label}{total_val:.2f}")
-        lines.append(f"+10%: {reserve_val:.2f}")
-        lines.append(f"Разом: {grand_val:.2f}")
+        lines.append(f"{src_label}{int(total_val)}")
+        lines.append(f"+10%: {int(reserve_val)}")
+        lines.append(f"Разом: {int(grand_val)}")
 
     text = "\n".join(lines)
     # Telegram CopyTextButton limit is 256 chars
