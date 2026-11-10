@@ -72,6 +72,7 @@ async def fetch(kiro_url: str = "", kiro_key: str = "") -> list:
     rows = await adapter.fetch(CATEGORY, URL)
     for row in rows:
         row.price_per_unit = normalize_price(row)
+    rows = [r for r in rows if not r.item.startswith("Стяжка епоксидна Коутекс")]
     return rows
 
 
