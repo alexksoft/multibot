@@ -169,9 +169,9 @@ def _build_copy_text(collected: dict) -> str:
         reserve_val = round(total_val * 0.1, 2)
         grand_val = round(total_val + reserve_val, 2)
         src_label = f"Ціна({src_str}): " if src_str else "Ціна: "
-        lines.append(f"{src_label}{int(total_val)}₴")
-        lines.append(f"+10%: {int(reserve_val)}₴")
-        lines.append(f"Разом: {int(grand_val)}₴")
+        lines.append(f"{src_label}{int(total_val):,} ₴".replace(",", " "))
+        lines.append(f"+10%: {int(reserve_val):,} ₴".replace(",", " "))
+        lines.append(f"Разом: {int(grand_val):,} ₴".replace(",", " "))
 
     text = "\n".join(lines)
     # Telegram CopyTextButton limit is 256 chars
