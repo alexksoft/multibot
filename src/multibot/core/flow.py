@@ -160,7 +160,7 @@ def _build_copy_text(collected: dict) -> str:
         except ValueError:
             pass
 
-    lines = ["Розрахунок БудПомічник v2.4", work_line]
+    lines = ["Розрахунок | ТГ-бот «БудПомічник» v2.4", work_line]
     if params_line:
         lines.append(params_line)
     lines.append("")
